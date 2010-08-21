@@ -12,15 +12,140 @@
 
 #include "core.h"
 
-static void ws_data_callback(EV_P_ ws_connection_t *conn, int revents) {
+#define bool int
+#define TRUE 1
+#define FALSE 0
+
+#define obstack_chunk_alloc malloc
+#define obstack_chunk_free free
+
+static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
+    obstack_init(&req->pieces);
+    req->conn = conn;
+    memcpy(&req->req_callbacks,conn->req_callbacks, sizeof(req->req_callbacks));
+    req->network_timeout = conn->network_timeout;
+    req->headers_buf = buf;
+    req->bufposition = 0;
+    req->headerlen = 0;
+    req->next = NULL;
+    req->prev = NULL;
+}
+
+static void ws_request_free(ws_request_t *req) {
+    if(req->headerlen) {
+        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
+        cb(req);
+    }
+    obstack_free(&req->pieces, NULL);
+    free(req);
+}
+
+static void ws_connection_close(ws_connection_t *conn) {
+    ws_request_t *req = conn->first_req;
+    while(req) {
+        ws_request_free(req);
+        req = req->next;
+    };
+    if(&conn->watcher.active) {
+        ev_io_stop(conn->loop, &conn->watcher);
+    }
+    if(&conn->timeo.active) {
+        ev_timer_stop(conn->loop, &conn->timeo);
+    }
+}
+
+static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
+    shutdown(conn->watcher.fd, SHUT_RD);
+    ev_io_stop(conn->loop, &conn->watcher);
+    if(conn->request_num) {
+        if(eat_last) {
+            ws_request_t *prev = conn->last_req->prev;
+            if(prev) {
+                prev->next = NULL;
+                conn->last_req = prev;
+                -- conn->request_num;
+                conn->close_on_finish = TRUE;
+            } else {
+                conn->last_req = NULL;
+                conn->first_req = NULL;
+                --conn->request_num;
+                ws_connection_close(conn);
+            }
+        } else {
+            conn->close_on_finish = TRUE;
+        }
+    } else {
+        ws_connection_close(conn);
+    }
+}
+
+static void ws_try_read(ws_request_t *req) {
+    int r = read(req->conn->watcher.fd, req->headers_buf+req->bufposition,
+        req->conn->max_header_size - req->bufposition);
+    if(r < 0) {
+        switch(errno) {
+            case EAGAIN:
+            case EINTR:
+                return;
+            default:
+                ws_connection_close(req->conn);
+                return;
+        }
+    }
+    if(r == 0) {
+        ws_graceful_finish(req->conn, TRUE);
+        return;
+    }
+    req->bufposition = r;
+    void *e1 = memmem(req->headers_buf, r, "\r\n\r\n", 4);
+    void *e2 = memmem(req->headers_buf, r, "\n\n", 2);
+    if(e2 < e1 && e2 != req->headers_buf || e1 == req->headers_buf) {
+        e1 = e2;
+    }
+    req->bufposition += r;
+    if(e1 == req->headers_buf) { // no end of headers
+        if(req->bufposition >= req->conn->max_header_size) {
+            ws_graceful_finish(req->conn, TRUE);
+        }
+        return;
+    }
+    ws_request_cb cb = req->req_callbacks[WS_REQ_CB_HEADERS];
+    if(cb) {
+        int res = cb(req);
+        if(res < 0) {
+            req->headerlen = 0;
+            ws_request_free(req);
+        }
+    }
+}
+
+static void ws_data_callback(struct ev_loop *loop, ws_connection_t *conn,
+    int revents) {
     if(revents & EV_READ) {
-        //TODO
-        printf("READ\n");
+        if(!conn->last_req || conn->last_req->headerlen) {
+            ws_request_t *req = (ws_request_t*)malloc(conn->_req_size
+                + conn->max_header_size);
+            if(!req) {
+                ws_graceful_finish(conn, FALSE);
+                return;
+            }
+            ws_request_init(req, conn, (char *)req + conn->_req_size);
+            if(conn->last_req) {
+                conn->last_req->next = req;
+                req->prev = conn->last_req;
+            } else {
+                conn->first_req = req;
+            }
+            conn->last_req = req;
+            ++conn->request_num;
+        }
+        ws_try_read(conn->last_req);
     }
     assert(!(revents & EV_ERROR));
 }
 
-static void ws_data_timeout(EV_P_ ev_timer *timer, int revents) {
+static void ws_data_timeout(struct ev_loop *loop, ev_timer *timer,
+    int revents) {
     ws_connection_t *conn = (ws_connection_t*)((char *)timer
         - offsetof(ws_connection_t, timeo));
     if(revents & EV_TIMER) {
@@ -41,12 +166,15 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     conn->_req_size = serv->_req_size;
     conn->serv = serv;
     conn->loop = serv->loop;
+    conn->max_header_size = serv->max_header_size;
+    conn->close_on_finish = FALSE;
     memcpy(conn->req_callbacks, serv->req_callbacks,
         sizeof(conn->req_callbacks));
     memcpy(conn->conn_callbacks, serv->conn_callbacks,
         sizeof(conn->conn_callbacks));
     ev_io_init(&conn->watcher,
-        (void (*)(EV_P_ struct ev_io *,int))ws_data_callback, fd, EV_READ);
+        (void (*)(struct ev_loop*, struct ev_io *,int))ws_data_callback,
+        fd, EV_READ);
     ev_timer_init(&conn->timeo, ws_data_timeout, conn->network_timeout, 0);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_CONNECT];
     if(cb && cb(conn) < 0) {
@@ -58,7 +186,8 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     ev_timer_start(serv->loop, &conn->timeo);
 }
 
-static void ws_accept_callback(EV_P_ ws_listener_t *l, int revents) {
+static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
+    int revents) {
     if(revents & EV_READ) {
         struct sockaddr_in addr;
         int addrlen = sizeof(addr);
@@ -90,6 +219,7 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     serv->last_conn = NULL;
     serv->connection_num = 0;
     serv->network_timeout = 10.0;
+    serv->max_header_size = 16384;
     bzero(serv->req_callbacks, sizeof(serv->req_callbacks));
     bzero(serv->conn_callbacks, sizeof(serv->conn_callbacks));
     return 0;
@@ -101,7 +231,8 @@ int ws_add_fd(ws_server_t *serv, int fd) {
         return -1;
     }
     ev_io_init(&l->watcher,
-        (void (*)(EV_P_ ev_io *, int))ws_accept_callback, fd, EV_READ);
+        (void (*)(struct ev_loop*, ev_io *, int))ws_accept_callback,
+        fd, EV_READ);
     l->serv = serv;
 
     l->next = serv->listeners;
@@ -119,6 +250,9 @@ int ws_add_tcp(ws_server_t *serv, in_addr_t ip, int port) {
     addr.sin_port = htons(port);
     int fd = socket(PF_INET, SOCK_STREAM, 0);
     if(fd < 0) return -1;
+    int size = 1;
+    if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+        &size, sizeof(size)) < 0) return -1;
     if(bind(fd, &addr, sizeof(addr)) < 0) return -1;
     if(listen(fd, 4096) < 0) return -1;
     ws_add_fd(serv, fd);

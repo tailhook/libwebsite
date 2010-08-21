@@ -11,8 +11,8 @@
     (targ)->req_callbacks[WS_REQ_CB_HEADERS] = (ws_request_cb)fun
 #define ws_REQUEST_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_REQUEST] = (ws_request_cb)fun
-#define ws_RESPONSE_CB(targ, fun) \
-    (targ)->req_callbacks[WS_REQ_CB_RESPONSE] = (ws_request_cb)fun
+#define ws_FINISH_CB(targ, fun) \
+    (targ)->req_callbacks[WS_REQ_CB_FINISH] = (ws_request_cb)fun
 #define ws_CONNECT_CB(targ, fun) \
     (targ)->conn_callbacks[WS_CONN_CB_CONNECT] = (ws_connection_cb)fun
 #define ws_DISCONNECT_CB(targ, fun) \
@@ -22,7 +22,7 @@
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
     WS_REQ_CB_REQUEST, // got request body
-    WS_REQ_CB_RESPONSE, // response fully sent
+    WS_REQ_CB_FINISH, // response fully sent
     WS_REQ_CB_COUNT,
 } ws_request_cb_enum;
 
@@ -43,6 +43,11 @@ typedef struct ws_request_s {
     struct ws_connection_s *conn;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ev_tstamp network_timeout;
+    char *headers_buf;
+    int bufposition;
+    int headerlen;
+    struct ws_request_s *next;
+    struct ws_request_s *prev;
 } ws_request_t;
 
 typedef struct ws_connection_s {
@@ -52,14 +57,20 @@ typedef struct ws_connection_s {
     struct sockaddr_in addr;
     ev_tstamp network_timeout;
     int _req_size;
+    int max_header_size;
     struct ws_server_s *serv;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
+    struct ws_request_s *first_req;
+    struct ws_request_s *last_req;
+    size_t request_num;
+    int close_on_finish;
 } ws_connection_t;
 
 typedef struct ws_server_s {
     struct ev_loop *loop;
     ev_tstamp network_timeout;
+    int max_header_size;
     int _conn_size;
     int _req_size;
     struct ws_listener_s *listeners;

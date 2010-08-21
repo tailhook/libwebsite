@@ -34,24 +34,29 @@ typedef struct myrequest_s {
 } myrequest_t;
 
 int incr_connections(myconnection_t *conn) {
+    printf("incr_connections\n");
     conn->id = connections++;
     ++current_connections;
 }
 
 int decr_connections(myconnection_t *conn) {
+    printf("decr_connections\n");
     --current_connections;
 }
 
 int incr_requests(myrequest_t *req) {
+    printf("incr_requests\n");
     req->id = requests++;
     ++current_requests;
 }
 
 int decr_requests(myrequest_t *req) {
+    printf("decr_requests\n");
     --current_requests;
 }
 
 int reply(myrequest_t *req) {
+    printf("reply\n");
     char buf[32];
 /*    ws_set_statusline(&req->native, "200 OK");*/
 /*    sprintf(buf, "%d", req->id);*/
@@ -76,7 +81,7 @@ int main(int argc, char **argv) {
     ws_DISCONNECT_CB(&server, decr_connections);
     ws_HEADERS_CB(&server, incr_requests);
     ws_REQUEST_CB(&server, reply);
-    ws_RESPONSE_CB(&server, decr_requests);
+    ws_FINISH_CB(&server, decr_requests);
 	ev_loop (loop, 0);
 	return 0;
 }
