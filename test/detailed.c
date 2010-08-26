@@ -14,6 +14,8 @@ int connections = 0;
 int requests = 0;
 int current_connections = 0;
 int current_requests = 0;
+int host_header = -1;
+int realip_header = -1;
 
 char testdata[] = "<!DOCTYPE html>\n"
     "<html>\n"
@@ -56,7 +58,6 @@ int decr_requests(myrequest_t *req) {
 }
 
 int reply(myrequest_t *req) {
-    printf("reply\n");
     char buf[32];
 /*    ws_set_statusline(&req->native, "200 OK");*/
 /*    sprintf(buf, "%d", req->id);*/
@@ -82,6 +83,9 @@ int main(int argc, char **argv) {
     ws_HEADERS_CB(&server, incr_requests);
     ws_REQUEST_CB(&server, reply);
     ws_FINISH_CB(&server, decr_requests);
+    host_header = ws_index_header(&server, "Host");
+    realip_header = ws_index_header(&server, "X-Real-IP");
+    ws_server_start(&server);
 	ev_loop (loop, 0);
 	return 0;
 }

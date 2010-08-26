@@ -17,6 +17,7 @@ def build(bld):
         features     = ['cc', 'cprogram'],
         source       = [
             'src/core.c',
+            'src/search.c',
             'test/simple.c',
             ],
         target       = 'simple',
@@ -29,6 +30,7 @@ def build(bld):
         features     = ['cc', 'cprogram'],
         source       = [
             'src/core.c',
+            'src/search.c',
             'test/detailed.c',
             ],
         target       = 'detailed',

@@ -5,8 +5,12 @@
 #include <obstack.h>
 #include <netinet/in.h>
 
+typedef int bool;
+#define TRUE 1
+#define FALSE 0
+
 #define ws_CONNECTION_STRUCT(targ, typ) (targ)->_conn_size = sizeof(typ)
-#define ws_REQUEST_STRUCT(targ, typ) (targ)->_conn_size = sizeof(typ)
+#define ws_REQUEST_STRUCT(targ, typ) (targ)->_req_size = sizeof(typ)
 #define ws_HEADERS_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_HEADERS] = (ws_request_cb)fun
 #define ws_REQUEST_CB(targ, fun) \
@@ -32,11 +36,32 @@ typedef enum {
     WS_CONN_CB_COUNT,
 } ws_connection_cb_enum;
 
+typedef enum {
+    WS_H_CONTENT_LENGTH,
+    WS_H_UPGRADE,
+    WS_STD_HEADERS,
+} ws_header_enum;
+
+typedef enum {
+    WS_HTTP_10,
+    WS_HTTP_11,
+} ws_version_enum;
+
 struct ws_request_s;
 struct ws_connection_s;
 
 typedef int (*ws_request_cb)(struct ws_request_s *req);
 typedef int (*ws_connection_cb)(struct ws_connection_s *conn);
+
+typedef struct ws_header_pair_s {
+    char *name;
+    char *value;
+} ws_header_pair_t;
+
+typedef struct ws_hparser_s {
+    void *index;
+    int count;
+} ws_hparser_t;
 
 typedef struct ws_request_s {
     struct obstack pieces;
@@ -46,8 +71,13 @@ typedef struct ws_request_s {
     char *headers_buf;
     int bufposition;
     int headerlen;
+    char *uri;
+    char *method;
+    ws_version_enum http_version;
+    ws_header_pair_t *allheaders;
     struct ws_request_s *next;
     struct ws_request_s *prev;
+    char **headerindex;
 } ws_request_t;
 
 typedef struct ws_connection_s {
@@ -80,6 +110,7 @@ typedef struct ws_server_s {
     size_t connection_num;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
+    ws_hparser_t header_parser;
 } ws_server_t;
 
 int ws_set_statuscode(ws_request_t *req, int code);
@@ -91,8 +122,17 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop);
 int ws_add_tcp(ws_server_t *serv, in_addr_t addr, int port);
 int ws_add_unix(ws_server_t *serv, const char *filename);
 int ws_add_fd(ws_server_t *serv, int fd);
+int ws_index_header(ws_server_t *serv, const char *name);
+int ws_server_start(ws_server_t *serv);
 
 void ws_quickstart(ws_server_t *serv, const char *hostname,
     int port, ws_request_cb cb);
+
+void *ws_match_new();
+int ws_match_add(void *box, const char *string, size_t result);
+int ws_match_iadd(void *box, const char *string, size_t result);
+int ws_match_compile(void *box);
+bool ws_match(void *box, const char *string, size_t *result);
+bool ws_imatch(void *box, const char *string, size_t *result);
 
 #endif // WS_WEBSITE_H
