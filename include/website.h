@@ -38,6 +38,7 @@ typedef enum {
 
 typedef enum {
     WS_H_CONTENT_LENGTH,
+    WS_H_CONNECTION,
     WS_H_UPGRADE,
     WS_STD_HEADERS,
 } ws_header_enum;
@@ -46,6 +47,13 @@ typedef enum {
     WS_HTTP_10,
     WS_HTTP_11,
 } ws_version_enum;
+
+typedef enum {
+    WS_REPLY_NOT_READY,
+    WS_REPLY_FINISHED,
+    WS_REPLY_CHUNKED,
+    WS_REPLY_SENDFILE,
+} ws_reply_enum;
 
 struct ws_request_s;
 struct ws_connection_s;
@@ -78,6 +86,14 @@ typedef struct ws_request_s {
     struct ws_request_s *next;
     struct ws_request_s *prev;
     char **headerindex;
+    int reply_pos;
+    int reply_state;
+    char *reply_head;
+    int reply_head_size;
+    int _contlen_offset;
+    char *reply_body;
+    int reply_body_size;
+    struct ev_io reply_watch;
 } ws_request_t;
 
 typedef struct ws_connection_s {
@@ -89,6 +105,8 @@ typedef struct ws_connection_s {
     int _req_size;
     int max_header_size;
     struct ws_server_s *serv;
+    struct ws_connection_s *next;
+    struct ws_connection_s *prev;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
     struct ws_request_s *first_req;
@@ -113,9 +131,9 @@ typedef struct ws_server_s {
     ws_hparser_t header_parser;
 } ws_server_t;
 
-int ws_set_statuscode(ws_request_t *req, int code);
-int ws_set_statusline(ws_request_t *req, const char *line);
+int ws_statusline(ws_request_t *req, const char *line);
 int ws_add_header(ws_request_t *req, const char *name, const char *value);
+int ws_finish_headers(ws_request_t *req);
 int ws_reply_data(ws_request_t *req, const char *data, size_t data_size);
 
 int ws_server_init(ws_server_t *serv, struct ev_loop *loop);

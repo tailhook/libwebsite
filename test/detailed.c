@@ -17,9 +17,12 @@ int current_requests = 0;
 int host_header = -1;
 int realip_header = -1;
 
-char testdata[] = "<!DOCTYPE html>\n"
+char testdata0[] =
+    "<!DOCTYPE html>\n";
+char testdata1[] =
     "<html>\n"
-    "  <head><title>Hello from sample</title></head>\n"
+    "  <head><title>Hello from sample</title></head>\n";
+char testdata2[] =
     "  <body>\n"
     "    <h1>Hello from sample</h1>\n"
     "  </body>\n"
@@ -59,13 +62,20 @@ int decr_requests(myrequest_t *req) {
 
 int reply(myrequest_t *req) {
     char buf[32];
-/*    ws_set_statusline(&req->native, "200 OK");*/
-/*    sprintf(buf, "%d", req->id);*/
-/*    ws_add_header(&req->native, "X-Request-ID", buf);*/
-/*    sprintf(buf, "%d", ((myconnection_t*)req->native.conn)->id);*/
-/*    ws_add_header(&req->native, "X-Connection-ID", buf);*/
-/*    ws_add_header(&req->native, "Content-type", "text/html");*/
-/*    ws_reply_data(&req->native, testdata, sizeof(testdata));*/
+    printf("replying...\n");
+    ws_statusline(&req->native, "200 OK");
+    sprintf(buf, "%d", req->id);
+    ws_add_header(&req->native, "X-Request-ID", buf);
+    sprintf(buf, "%d", ((myconnection_t*)req->native.conn)->id);
+    ws_add_header(&req->native, "X-Connection-ID", buf);
+    ws_add_header(&req->native, "Content-Type", "text/html");
+    ws_finish_headers(&req->native);
+    obstack_blank(&req->native.pieces, 0);
+    obstack_grow(&req->native.pieces, testdata0, sizeof(testdata0)-1);
+    obstack_grow(&req->native.pieces, testdata1, sizeof(testdata1)-1);
+    obstack_grow(&req->native.pieces, testdata2, sizeof(testdata2)-1);
+    int len = obstack_object_size(&req->native.pieces);
+    ws_reply_data(&req->native, obstack_finish(&req->native.pieces), len);
     return 0;
 }
 

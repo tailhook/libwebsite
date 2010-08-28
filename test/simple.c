@@ -19,9 +19,9 @@ char testdata[] = "<!DOCTYPE html>\n"
     "</html>\n";
 
 int reply(ws_request_t *req) {
-    printf("GOT REQUEST\n");
-/*    ws_reply_data(req, testdata, sizeof(testdata));*/
-    return 200;
+    ws_statusline(req, "200 OK");
+    ws_reply_data(req, testdata, sizeof(testdata));
+    return WS_REPLY_FINISHED;
 }
 
 

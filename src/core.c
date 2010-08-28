@@ -30,6 +30,12 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->headerlen = 0;
     req->next = NULL;
     req->prev = NULL;
+    req->reply_state = 0;
+    req->reply_head = NULL;
+    req->reply_head_size = 0;
+    req->reply_body = NULL;
+    req->reply_body_size = 0;
+    req->reply_pos = 0;
 }
 
 static void ws_request_free(ws_request_t *req) {
@@ -60,6 +66,17 @@ static void ws_connection_close(ws_connection_t *conn) {
     if(cb) {
         cb(conn);
     }
+    if(conn->next) {
+        conn->next->prev = conn->prev;
+    } else {
+        conn->serv->last_conn = conn->prev;
+    }
+    if(conn->prev) {
+        conn->prev->next = conn->next;
+    } else {
+        conn->serv->first_conn = conn->next;
+    }
+    free(conn);
 }
 
 static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
@@ -181,10 +198,22 @@ static void ws_try_read(ws_request_t *req) {
             goto earlyerror;
         }
     }
-    char *len = req->headerindex[WS_H_CONTENT_LENGTH];
-    if(len && strcmp(len, "0")) {
+    req->reply_state = WS_R_EMPTY;
+
+    char *item = req->headerindex[WS_H_CONTENT_LENGTH];
+    if(item && strcmp(item, "0")) {
         printf("Post body not implemented yet\n");
         goto lateerror;
+    }
+    item = req->headerindex[WS_H_CONNECTION];
+    if(req->http_version == WS_HTTP_10) {
+        if(!item || strcasecmp(item, "Keep-Alive")) {
+            ws_graceful_finish(req->conn, FALSE);
+        }
+    } else {
+        if(item || !strcasecmp(item, "close")) {
+            ws_graceful_finish(req->conn, FALSE);
+        }
     }
     cb = req->req_callbacks[WS_REQ_CB_REQUEST];
     if(cb) {
@@ -268,6 +297,11 @@ static void ws_connection_init(int fd, ws_server_t *serv,
         free(conn);
         return;
     }
+    conn->next = NULL;
+    conn->prev = serv->last_conn;
+    if(!conn->prev) {
+        serv->first_conn = serv->last_conn = conn;
+    }
     ev_io_start(serv->loop, &conn->watcher);
     ev_timer_start(serv->loop, &conn->timeo);
 }
@@ -314,6 +348,9 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     hindex = ws_match_iadd(serv->header_parser.index,
         "Content-Length", WS_H_CONTENT_LENGTH);
     assert(hindex == WS_H_CONTENT_LENGTH);
+    hindex = ws_match_iadd(serv->header_parser.index,
+        "Connection", WS_H_CONNECTION);
+    assert(hindex == WS_H_CONNECTION);
     hindex = ws_match_iadd(serv->header_parser.index,
         "Upgrade", WS_H_UPGRADE);
     assert(hindex == WS_H_UPGRADE);
@@ -368,14 +405,177 @@ int ws_index_header(ws_server_t *serv, const char *name) {
     return res;
 }
 
+static int ws_start_reply(ws_request_t *req);
+
+static void ws_send_reply(struct ev_loop *loop,
+    struct ev_io *watch, int revents) {
+    ws_request_t *req = (ws_request_t*)(((char *)watch)
+        - offsetof(ws_request_t, reply_watch));
+    if(revents & EV_WRITE) {
+        assert(req->reply_head_size);
+        int res;
+        if(req->reply_head_size <= req->reply_pos) { //only the second part
+            res = write(watch->fd,
+                req->reply_body + req->reply_pos - req->reply_head_size,
+                req->reply_body_size - req->reply_pos + req->reply_head_size);
+        } else {
+            struct iovec data[2] = {
+                { iov_base: req->reply_head + req->reply_pos,
+                  iov_len: req->reply_head_size - req->reply_pos },
+                { iov_base: req->reply_body,
+                  iov_len: req->reply_body_size},
+                };
+            res = writev(watch->fd, data, 2);
+        }
+        if(res < 0) {
+            switch(errno) {
+                case EAGAIN:
+                case EINTR:
+                    break;
+                default:
+                    ws_connection_close(req->conn);
+                    return;
+            }
+        } else if(res == 0) {
+            ws_connection_close(req->conn);
+            return;
+        }
+        req->reply_pos += res;
+        if(req->reply_pos >= req->reply_head_size + req->reply_body_size) {
+            req->reply_state = WS_R_SENT;
+            ev_io_stop(loop, watch);
+        }
+        ws_connection_t *conn = req->conn;
+        conn->first_req = req->next;
+        conn->request_num -= 1;
+        if(req->next) {
+            req->next->prev = NULL;
+        } else {
+            conn->last_req = NULL;
+        }
+        ws_request_free(req);
+        if(conn->first_req) {
+            ws_start_reply(conn->first_req);
+        } else if(conn->close_on_finish) {
+            ws_connection_close(conn);
+        }
+    }
+    assert(!(revents & EV_ERROR));
+}
+
+static int ws_start_reply(ws_request_t *req) {
+    if(req->reply_state < WS_R_BODY) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->reply_state >= WS_R_SENDING) {
+        errno = EALREADY;
+        return -1;
+    }
+    req->reply_state = WS_R_SENDING;
+    ev_io_init(&req->reply_watch, ws_send_reply,
+        req->conn->watcher.fd, EV_WRITE);
+    ev_io_start(req->conn->loop, &req->reply_watch);
+    return 0;
+}
+
 void ws_quickstart(ws_server_t *serv, const char *host,
     int port, ws_request_cb cb) {
     struct in_addr addr;
     if(ws_server_init(serv, ev_default_loop(0)) < 0
        || inet_aton(host, &addr) < 0
        || ws_add_tcp(serv, addr.s_addr, port) < 0
-       || ws_server_start(serv)) {
+       || ws_server_start(serv) < 0) {
         perror("ws_quickstart");
     }
     ws_REQUEST_CB(serv, cb);
+}
+
+int ws_statusline(ws_request_t *req, const char *line) {
+    if(req->reply_state <= WS_R_UNDEFINED) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->reply_state >= WS_R_STATUS){
+        errno = EALREADY;
+        return -1;
+    }
+    obstack_blank(&req->pieces, 0);
+    obstack_grow(&req->pieces, "HTTP/1.1 ", 9);
+    obstack_grow(&req->pieces, line, strlen(line));
+    obstack_grow(&req->pieces, "\r\n", 2);
+    req->reply_state = WS_R_STATUS;
+    ws_add_header(req, "Content-Length", "           0");
+    req->_contlen_offset = obstack_object_size(&req->pieces)-14;
+    if(req->conn->close_on_finish && req->conn->last_req == req) {
+        ws_add_header(req, "Connection", "close");
+    } else {
+        ws_add_header(req, "Connection", "Keep-Alive");
+    }
+}
+
+int ws_add_header(ws_request_t *req, const char *name, const char *value) {
+    if(req->reply_state <= WS_R_UNDEFINED) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->reply_state >= WS_R_HEADERS) {
+        errno = EALREADY;
+        return -1;
+    }
+    if(req->reply_state < WS_R_STATUS) {
+        if(ws_statusline(req, "200 OK") < 0) {
+            return -1;
+        }
+    }
+    obstack_grow(&req->pieces, name, strlen(name));
+    obstack_grow(&req->pieces, ": ", 2);
+    obstack_grow(&req->pieces, value, strlen(value));
+    obstack_grow(&req->pieces, "\r\n", 2);
+}
+
+int ws_finish_headers(ws_request_t *req) {
+    if(req->reply_state <= WS_R_UNDEFINED) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->reply_state >= WS_R_HEADERS) {
+        errno = EALREADY;
+        return -1;
+    }
+    if(req->reply_state < WS_R_STATUS) {
+        if(ws_statusline(req, "200 OK") < 0) {
+            return -1;
+        }
+    }
+    obstack_grow(&req->pieces, "\r\n", 2);
+    req->reply_head_size = obstack_object_size(&req->pieces);
+    req->reply_head = obstack_finish(&req->pieces);
+    req->reply_state = WS_R_HEADERS;
+}
+
+int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
+    if(req->reply_state <= WS_R_UNDEFINED) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->reply_state >= WS_R_BODY) {
+        errno = EALREADY;
+        return -1;
+    }
+    if(req->reply_state < WS_R_HEADERS) {
+        if(ws_finish_headers(req) < 0) {
+            return -1;
+        }
+    }
+    req->reply_body = (char *)data;
+    req->reply_body_size = len;
+    int lenlen = sprintf(req->reply_head + req->_contlen_offset, "%12d", len);
+    assert(lenlen == 12);
+    *(req->reply_head + req->_contlen_offset+12) = '\r';
+    req->reply_state = WS_R_BODY;
+    if(!req->prev) {
+        ws_start_reply(req);
+    }
+    return 0;
 }
