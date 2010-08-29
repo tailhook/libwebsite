@@ -147,10 +147,20 @@ void ws_quickstart(ws_server_t *serv, const char *hostname,
     int port, ws_request_cb cb);
 
 void *ws_match_new();
-int ws_match_add(void *box, const char *string, size_t result);
-int ws_match_iadd(void *box, const char *string, size_t result);
+size_t ws_match_add(void *box, const char *string, size_t result);
+size_t ws_match_iadd(void *box, const char *string, size_t result);
 int ws_match_compile(void *box);
 bool ws_match(void *box, const char *string, size_t *result);
 bool ws_imatch(void *box, const char *string, size_t *result);
+
+void *ws_fuzzy_new();
+size_t ws_fuzzy_add(void *box, const char *string, bool prefix, size_t result);
+size_t ws_fuzzy_iadd(void *box, const char *string, bool prefix, size_t result);
+size_t ws_fuzzy_radd(void *box, const char *string, bool prefix, size_t result);
+size_t ws_fuzzy_iradd(void *box,const char *string, bool prefix, size_t result);
+int ws_fuzzy_compile(void *box);
+bool ws_fuzzy(void *box, const char *string, size_t *result);
+bool ws_ifuzzy(void *box, const char *string, size_t *result);
+bool ws_irfuzzy(void *box, const char *string, size_t *result);
 
 #endif // WS_WEBSITE_H

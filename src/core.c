@@ -36,6 +36,7 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->reply_body = NULL;
     req->reply_body_size = 0;
     req->reply_pos = 0;
+    req->reply_watch.active = 0;
 }
 
 static void ws_request_free(ws_request_t *req) {
@@ -45,15 +46,27 @@ static void ws_request_free(ws_request_t *req) {
             cb(req);
         }
     }
+    if(req->reply_watch.active) {
+        ev_io_stop(req->conn->loop, &req->reply_watch);
+    }
+    if(req->next) {
+        req->next->prev = req->prev;
+    } else {
+        req->conn->last_req = req->prev;
+    }
+    if(req->prev) {
+        req->prev->next = req->prev;
+    } else {
+        req->conn->first_req = req->next;
+    }
+    req->conn->request_num -= 1;
     obstack_free(&req->pieces, NULL);
     free(req);
 }
 
 static void ws_connection_close(ws_connection_t *conn) {
-    ws_request_t *req = conn->first_req;
-    while(req) {
-        ws_request_free(req);
-        req = req->next;
+    while(conn->first_req) {
+        ws_request_free(conn->first_req);
     };
     if(&conn->watcher.active) {
         ev_io_stop(conn->loop, &conn->watcher);
@@ -84,17 +97,10 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
     ev_io_stop(conn->loop, &conn->watcher);
     if(conn->request_num) {
         if(eat_last) {
-            ws_request_t *prev = conn->last_req->prev;
             ws_request_free(conn->last_req);
-            if(prev) {
-                prev->next = NULL;
-                conn->last_req = prev;
-                -- conn->request_num;
+            if(conn->last_req) {
                 conn->close_on_finish = TRUE;
             } else {
-                conn->last_req = NULL;
-                conn->first_req = NULL;
-                --conn->request_num;
                 ws_connection_close(conn);
             }
         } else {
@@ -180,7 +186,6 @@ static void ws_try_read(ws_request_t *req) {
         while(*++c && *c != '\r' && *c != '\n');
         finish = !*c;
         *c++ = '\0';
-        //TODO: add to index, grow and add to headers
         size_t index = 0;
         if(ws_imatch(hp->index, hname, &index)) {
             req->headerindex[index] = hvalue;
@@ -299,9 +304,12 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     }
     conn->next = NULL;
     conn->prev = serv->last_conn;
-    if(!conn->prev) {
-        serv->first_conn = serv->last_conn = conn;
+    if(conn->prev) {
+        conn->prev->next = conn;
+    } else {
+        serv->first_conn = conn;
     }
+    serv->last_conn = conn;
     ev_io_start(serv->loop, &conn->watcher);
     ev_timer_start(serv->loop, &conn->timeo);
 }
@@ -446,13 +454,6 @@ static void ws_send_reply(struct ev_loop *loop,
             ev_io_stop(loop, watch);
         }
         ws_connection_t *conn = req->conn;
-        conn->first_req = req->next;
-        conn->request_num -= 1;
-        if(req->next) {
-            req->next->prev = NULL;
-        } else {
-            conn->last_req = NULL;
-        }
         ws_request_free(req);
         if(conn->first_req) {
             ws_start_reply(conn->first_req);

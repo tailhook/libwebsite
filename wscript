@@ -39,3 +39,16 @@ def build(bld):
         ccflags      = ['-std=c99', '-g'],
         lib          = ['ev'],
         )
+    bld(
+        features     = ['cc', 'cprogram'],
+        source       = [
+            'src/core.c',
+            'src/search.c',
+            'test/routing.c',
+            ],
+        target       = 'routing',
+        includes     = ['src', 'include'],
+        defines      = [],
+        ccflags      = ['-std=c99', '-g'],
+        lib          = ['ev'],
+        )
