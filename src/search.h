@@ -26,6 +26,7 @@ typedef enum {
 
 typedef struct ws_fuzzy_item_s {
     int flags;
+    int len;
     size_t exact_result;
     size_t prefix_result;
     struct ws_fuzzy_item_s *next;

@@ -192,6 +192,7 @@ size_t ws_fuzzy_add(void *rbox, const char *value, bool prefix, size_t result) {
     int len = strlen(value);
     ws_fuzzy_item_t *res = (ws_fuzzy_item_t*)obstack_alloc(&box->pieces,
         sizeof(ws_fuzzy_item_t)+len+1);
+    res->len = len;
     if(len > box->maxlen) {
         box->maxlen = len;
     }
@@ -302,7 +303,8 @@ bool ws_fuzzy(void *rbox, const char *value, size_t *result) {
     }
     while(sizei >= 0) {
         item = box->hashed[hashes[sizei] % box->hash_size];
-        if(item && !strncmp(value, item->item, box->sizes[sizei])) {
+        if(item && item->len == box->sizes[sizei]
+            && !strncmp(value, item->item, item->len)) {
             if(item->flags & WS_F_PREFIX) {
                 *result = item->prefix_result;
                 return TRUE;
