@@ -41,54 +41,50 @@ def build(bld):
         bld(
             features     = ['cc', 'cprogram'],
             source       = [
-                'src/core.c',
-                'src/search.c',
                 'test/simple.c',
                 ],
             target       = 'simple',
             includes     = ['src', 'include'],
             defines      = [],
-            ccflags      = ['-std=c99', '-g'],
-            lib          = ['ev'],
+            ccflags      = ['-std=c99'],
+            libpath      = [bld.bdir+'/default'],
+            lib          = ['ev', 'website'],
             )
         bld(
             features     = ['cc', 'cprogram'],
             source       = [
-                'src/core.c',
-                'src/search.c',
                 'test/detailed.c',
                 ],
             target       = 'detailed',
             includes     = ['src', 'include'],
             defines      = [],
-            ccflags      = ['-std=c99', '-g'],
-            lib          = ['ev'],
+            ccflags      = ['-std=c99'],
+            libpath      = [bld.bdir+'/default'],
+            lib          = ['ev', 'website'],
             )
         bld(
             features     = ['cc', 'cprogram'],
             source       = [
-                'src/core.c',
-                'src/search.c',
                 'test/routing.c',
                 ],
             target       = 'routing',
             includes     = ['src', 'include'],
             defines      = [],
-            ccflags      = ['-std=c99', '-g'],
-            lib          = ['ev'],
+            ccflags      = ['-std=c99'],
+            libpath      = [bld.bdir+'/default'],
+            lib          = ['ev', 'website'],
             )
         bld(
             features     = ['cc', 'cprogram'],
             source       = [
-                'src/core.c',
-                'src/search.c',
                 'test/runtests.c',
                 ],
             target       = 'runtests',
             includes     = ['src', 'include'],
             defines      = [],
-            ccflags      = ['-std=c99', '-g'],
-            lib          = ['ev', 'cunit'],
+            ccflags      = ['-std=c99'],
+            libpath      = [bld.bdir+'/default'],
+            lib          = ['ev', 'cunit', 'website'],
             )
         bld.add_group()
         bld(rule=bld.bdir + '/default/runtests', always=True)
