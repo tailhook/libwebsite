@@ -20,6 +20,9 @@
 #define obstack_chunk_alloc malloc
 #define obstack_chunk_free free
 
+static int ws_added_slice(ws_request_t *req, int size);
+static void ws_graceful_finish(ws_connection_t *conn, bool eat_last);
+
 static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     obstack_init(&req->pieces);
     req->conn = conn;
@@ -37,6 +40,24 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->reply_body_size = 0;
     req->reply_pos = 0;
     req->reply_watch.active = 0;
+}
+
+static void ws_request_new(ws_connection_t *conn) {
+    ws_request_t *req = (ws_request_t*)malloc(conn->_req_size
+        + conn->max_header_size);
+    if(!req) {
+        ws_graceful_finish(conn, FALSE);
+        return;
+    }
+    ws_request_init(req, conn, (char *)req + conn->_req_size);
+    if(conn->last_req) {
+        conn->last_req->next = req;
+        req->prev = conn->last_req;
+    } else {
+        conn->first_req = req;
+    }
+    conn->last_req = req;
+    ++conn->request_num;
 }
 
 static void ws_request_free(ws_request_t *req) {
@@ -128,18 +149,41 @@ static void ws_try_read(ws_request_t *req) {
         ws_graceful_finish(req->conn, TRUE);
         return;
     }
-    req->bufposition = r;
-    char *e1 = memmem(req->headers_buf, r, "\r\n\r\n", 4);
-    char *e2 = memmem(req->headers_buf, r, "\n\n", 2);
+    ws_request_t *creq = req;
+    while(r > 0) {
+        int nr = ws_added_slice(creq, r);
+        if(nr == -2) {
+            creq->headerlen = 0;
+        }
+        if(nr < 0) {
+            ws_graceful_finish(creq->conn, TRUE);
+        }
+        if(nr > 0) { // Requests pipelining
+            ws_request_new(creq->conn);
+            ws_request_t *nreq = creq->conn->last_req;
+            memcpy(nreq->headers_buf, creq->headers_buf+r-nr, nr);
+            creq = nreq;
+        }
+        r = nr;
+    }
+}
+
+static int ws_added_slice(ws_request_t *req, int size) {
+    req->bufposition += size;
+    char *e1 = memmem(req->headers_buf, size, "\r\n\r\n", 4);
+    char *e2 = memmem(req->headers_buf, size, "\n\n", 2);
+    size_t reallen;
     if(e2 < e1 && e2 || !e1) {
         e1 = e2;
+        reallen = e1 - req->headers_buf + 2;
+    } else if(e1) {
+        reallen = e1 - req->headers_buf + 4;
     }
-    req->bufposition += r;
     if(!e1) { // no end of headers
         if(req->bufposition >= req->conn->max_header_size) {
             ws_graceful_finish(req->conn, TRUE);
         }
-        return;
+        return 0;
     }
     req->headerlen = e1 - req->headers_buf;
     *e1 = '\0';
@@ -147,24 +191,24 @@ static void ws_try_read(ws_request_t *req) {
     req->method = c;
     while(*++c && !isspace(*c));
     *c = '\0';
-    if(c == e1) goto earlyerror;
+    if(c == e1) return -2;
     while(isspace(*++c));
-    if(c == e1) goto earlyerror;
+    if(c == e1) return -2;
     req->uri = c;
     while(*++c && !isspace(*c));
     *c = '\0';
-    if(c == e1) goto earlyerror;
+    if(c == e1) return -2;
     while(isspace(*++c));
     char *ver = c;
     while(*++c && !isspace(*c));
-    if(c == e1 || *c != '\r' && *c != '\n') goto earlyerror;
+    if(c == e1 || *c != '\r' && *c != '\n') return -2;
     *c++ = '\0';
     if(!strcmp("HTTP/1.1", ver)) {
         req->http_version = WS_HTTP_11;
     } else if(!strcmp("HTTP/1.0", ver)) {
         req->http_version = WS_HTTP_10;
     } else {
-        goto earlyerror;
+        return -2;
     }
     ws_hparser_t *hp = &req->conn->serv->header_parser;
     int header_count = 1; // sentinel
@@ -178,10 +222,10 @@ static void ws_try_read(ws_request_t *req) {
         while(isspace(*++c));
         char *hname = c;
         while(*++c && *c != ':');
-        if(!*c) goto earlyerror;
+        if(!*c) return -2;
         *c = '\0';
         while(isblank(*++c));
-        if(isspace(*c) || !*c) goto earlyerror;
+        if(isspace(*c) || !*c) return -2;
         char *hvalue = c;
         while(*++c && *c != '\r' && *c != '\n');
         finish = !*c;
@@ -200,15 +244,15 @@ static void ws_try_read(ws_request_t *req) {
     if(cb) {
         int res = cb(req);
         if(res < 0) {
-            goto earlyerror;
+            return -2;
         }
     }
     req->reply_state = WS_R_EMPTY;
 
     char *item = req->headerindex[WS_H_CONTENT_LENGTH];
     if(item && strcmp(item, "0")) {
-        printf("Post body not implemented yet\n");
-        goto lateerror;
+        fprintf(stderr, "Post body not implemented yet\n");
+        return -3;
     }
     item = req->headerindex[WS_H_CONNECTION];
     if(req->http_version == WS_HTTP_10) {
@@ -216,7 +260,7 @@ static void ws_try_read(ws_request_t *req) {
             ws_graceful_finish(req->conn, FALSE);
         }
     } else {
-        if(item || !strcasecmp(item, "close")) {
+        if(item && !strcasecmp(item, "close")) {
             ws_graceful_finish(req->conn, FALSE);
         }
     }
@@ -224,36 +268,18 @@ static void ws_try_read(ws_request_t *req) {
     if(cb) {
         int res = cb(req);
         if(res < 0) {
-            goto lateerror;
+            return -3;
         }
     }
 
-    return;
-earlyerror:
-    req->headerlen = 0;
-lateerror:
-    ws_graceful_finish(req->conn, TRUE);
+    return req->bufposition - reallen;
 }
 
 static void ws_data_callback(struct ev_loop *loop, ws_connection_t *conn,
     int revents) {
     if(revents & EV_READ) {
         if(!conn->last_req || conn->last_req->headerlen) {
-            ws_request_t *req = (ws_request_t*)malloc(conn->_req_size
-                + conn->max_header_size);
-            if(!req) {
-                ws_graceful_finish(conn, FALSE);
-                return;
-            }
-            ws_request_init(req, conn, (char *)req + conn->_req_size);
-            if(conn->last_req) {
-                conn->last_req->next = req;
-                req->prev = conn->last_req;
-            } else {
-                conn->first_req = req;
-            }
-            conn->last_req = req;
-            ++conn->request_num;
+            ws_request_new(conn);
         }
         ws_try_read(conn->last_req);
     }
