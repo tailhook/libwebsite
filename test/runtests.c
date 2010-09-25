@@ -137,6 +137,42 @@ void testFuzzy() {
     CU_ASSERT_EQUAL(result, 37);
 }
 
+void testRFuzzy() {
+    void *m = ws_fuzzy_new();
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "example.org", FALSE, 1), 1);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "example.com", TRUE, 2), 2);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "example.net", FALSE, 3), 3);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, ".example.net", FALSE, 3), 3);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "hello.example.net", TRUE, 35), 35);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "world.example.net", TRUE, 37), 37);
+    ws_rfuzzy_compile(m);
+    size_t result;
+    CU_ASSERT(ws_rfuzzy(m, "example.org", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    result = -1;
+    CU_ASSERT_FALSE(ws_rfuzzy(m, "hello.example.org", &result));
+    CU_ASSERT_EQUAL(result, -1);
+    CU_ASSERT_FALSE(ws_rfuzzy(m, "join.example.org", &result));
+    CU_ASSERT_EQUAL(result, -1);
+    CU_ASSERT(ws_rfuzzy(m, "example.com", &result));
+    CU_ASSERT_EQUAL(result, 2);
+    CU_ASSERT(ws_rfuzzy(m, "test.example.com", &result));
+    CU_ASSERT_EQUAL(result, 2);
+    CU_ASSERT(ws_rfuzzy(m, "testexample.com", &result));
+    CU_ASSERT_EQUAL(result, 2);
+    CU_ASSERT(ws_rfuzzy(m, "example.net", &result));
+    CU_ASSERT_EQUAL(result, 3);
+    result = -1;
+    CU_ASSERT_FALSE(ws_rfuzzy(m, "testexample.net", &result));
+    CU_ASSERT_EQUAL(result, -1);
+    CU_ASSERT(ws_rfuzzy(m, "hello.example.net", &result));
+    CU_ASSERT_EQUAL(result, 35);
+    CU_ASSERT(ws_rfuzzy(m, "world.example.net", &result));
+    CU_ASSERT_EQUAL(result, 37);
+    CU_ASSERT(ws_rfuzzy(m, "testworld.example.net", &result));
+    CU_ASSERT_EQUAL(result, 37);
+}
+
 int main(int argc, char **argv) {
    CU_pSuite pSuite = NULL;
 
@@ -157,6 +193,7 @@ int main(int argc, char **argv) {
        || (NULL == CU_add_test(pSuite, "Case-insensitive match", testIMatch))
        || (NULL == CU_add_test(pSuite, "Case-insensitive compilation", testIMatchCompile))
        || (NULL == CU_add_test(pSuite, "Fuzzy match", testFuzzy))
+       || (NULL == CU_add_test(pSuite, "Fuzzy reverse match", testRFuzzy))
        || 0) {
       CU_cleanup_registry();
       return CU_get_error();

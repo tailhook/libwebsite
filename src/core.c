@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -426,6 +427,20 @@ int ws_add_tcp(ws_server_t *serv, in_addr_t ip, int port) {
     if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
         &size, sizeof(size)) < 0) return -1;
     if(bind(fd, &addr, sizeof(addr)) < 0) return -1;
+    if(listen(fd, 4096) < 0) return -1;
+    ws_add_fd(serv, fd);
+}
+
+int ws_add_unix(ws_server_t *serv, const char *filename, size_t len) {
+    struct sockaddr_un addr;
+    addr.sun_family = AF_LOCAL;
+    memcpy(addr.sun_path, filename, len);
+    int fd = socket(PF_LOCAL, SOCK_STREAM, 0);
+    if(fd < 0) return -1;
+    int size = 1;
+    if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+        &size, sizeof(size)) < 0) return -1;
+    if(bind(fd, &addr, sizeof(addr.sun_path)+len) < 0) return -1;
     if(listen(fd, 4096) < 0) return -1;
     ws_add_fd(serv, fd);
 }

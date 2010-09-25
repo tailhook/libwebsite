@@ -138,7 +138,7 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t data_size);
 
 int ws_server_init(ws_server_t *serv, struct ev_loop *loop);
 int ws_add_tcp(ws_server_t *serv, in_addr_t addr, int port);
-int ws_add_unix(ws_server_t *serv, const char *filename);
+int ws_add_unix(ws_server_t *serv, const char *filename, size_t len);
 int ws_add_fd(ws_server_t *serv, int fd);
 int ws_index_header(ws_server_t *serv, const char *name);
 int ws_server_start(ws_server_t *serv);
@@ -156,10 +156,10 @@ bool ws_imatch(void *box, const char *string, size_t *result);
 void *ws_fuzzy_new();
 size_t ws_fuzzy_add(void *box, const char *string, bool prefix, size_t result);
 size_t ws_fuzzy_iadd(void *box, const char *string, bool prefix, size_t result);
-size_t ws_fuzzy_radd(void *box, const char *string, bool prefix, size_t result);
-size_t ws_fuzzy_iradd(void *box,const char *string, bool prefix, size_t result);
 int ws_fuzzy_compile(void *box);
+int ws_rfuzzy_compile(void *box);
 bool ws_fuzzy(void *box, const char *string, size_t *result);
+bool ws_rfuzzy(void *box, const char *string, size_t *result);
 bool ws_ifuzzy(void *box, const char *string, size_t *result);
 bool ws_irfuzzy(void *box, const char *string, size_t *result);
 

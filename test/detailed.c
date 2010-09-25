@@ -85,6 +85,7 @@ int main(int argc, char **argv) {
     ws_server_t server;
     ws_server_init(&server, loop);
     ws_add_tcp(&server, inet_addr("127.0.0.1"), 8080);
+    ws_add_unix(&server, "/tmp/ws_test_sock", strlen("/tmp/ws_test_sock"));
     //ws_add_fd(&server, 0);
     ws_CONNECTION_STRUCT(&server, myconnection_t);
     ws_REQUEST_STRUCT(&server, myrequest_t);
