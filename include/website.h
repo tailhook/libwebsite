@@ -79,6 +79,9 @@ typedef struct ws_request_s {
     char *headers_buf;
     int bufposition;
     int headerlen;
+    char *body;
+    int bodylen;
+    int bodyposition;
     char *uri;
     char *method;
     ws_version_enum http_version;

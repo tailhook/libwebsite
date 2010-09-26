@@ -90,5 +90,68 @@ class HTTP(unittest.TestCase):
         resp = sock.recv(4096)
         self.assertEquals(resp, sample_output2+sample_output)
 
+    def testBody(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 128\r\n"
+            b"Connection: close\r\n\r\n"
+            + (b"1234"*32))
+        time.sleep(0.1)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output)
+
+    def testBodyPipeline(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 32000\r\n"
+            b"Connection: Keep-Alive\r\n\r\n"
+            + (b"1234\n\n5678"*3200) +
+            b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 1400\r\n"
+            b"Connection: close\r\n\r\n"
+            + (b"abcde\n\n"*200))
+        time.sleep(0.1)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output2+sample_output)
+
+    def testBodyPipeline1(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 320\r\n"
+            b"Connection: Keep-Alive\r\n\r\n"
+            + (b"1234\n\n5678"*32) +
+            b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 1400\r\n"
+            b"Connection: close\r\n\r\n"
+            + (b"abcde\n\n"*200))
+        time.sleep(0.1)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output2+sample_output)
+
+    def testBodyPipeline2(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 32000\r\n"
+            b"Connection: Keep-Alive\r\n\r\n"
+            + (b"1234\n\n5678"*3200) + b"\r\n"
+            b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 1400\r\n"
+            b"Connection: close\r\n\r\n"
+            + (b"abcde\n\n"*200))
+        time.sleep(0.1)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output2+sample_output)
+
 if __name__ == '__main__':
     unittest.main()

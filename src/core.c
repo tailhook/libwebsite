@@ -21,7 +21,8 @@
 #define obstack_chunk_alloc malloc
 #define obstack_chunk_free free
 
-static int ws_added_slice(ws_request_t *req, int size);
+static int ws_head_slice(ws_request_t *req, int size);
+static int ws_body_slice(ws_request_t *req, int size);
 static void ws_graceful_finish(ws_connection_t *conn, bool eat_last);
 
 static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
@@ -32,6 +33,9 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->headers_buf = buf;
     req->bufposition = 0;
     req->headerlen = 0;
+    req->body = 0;
+    req->bodylen = 0;
+    req->bodyposition = 0;
     req->next = NULL;
     req->prev = NULL;
     req->reply_state = 0;
@@ -134,8 +138,16 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
 }
 
 static void ws_try_read(ws_request_t *req) {
-    int r = read(req->conn->watcher.fd, req->headers_buf+req->bufposition,
-        req->conn->max_header_size - req->bufposition);
+    int r;
+    if(req->headerlen) {
+        assert(req->body);
+        r = read(req->conn->watcher.fd, req->body+req->bodyposition,
+            req->bodylen - req->bodyposition);
+    } else {
+        r = read(req->conn->watcher.fd, req->headers_buf+req->bufposition,
+            req->conn->max_header_size - req->bufposition);
+    }
+
     if(r < 0) {
         switch(errno) {
             case EAGAIN:
@@ -152,7 +164,15 @@ static void ws_try_read(ws_request_t *req) {
     }
     ws_request_t *creq = req;
     while(r > 0) {
-        int nr = ws_added_slice(creq, r);
+        int nr;
+        char *tailbuf;
+        if(creq->headerlen) {
+            nr = ws_body_slice(creq, r);
+            tailbuf = creq->body+creq->bodylen;
+        } else {
+            nr = ws_head_slice(creq, r);
+            tailbuf = creq->headers_buf+r-nr;
+        }
         if(nr == -2) {
             creq->headerlen = 0;
         }
@@ -162,14 +182,41 @@ static void ws_try_read(ws_request_t *req) {
         if(nr > 0) { // Requests pipelining
             ws_request_new(creq->conn);
             ws_request_t *nreq = creq->conn->last_req;
-            memcpy(nreq->headers_buf, creq->headers_buf+r-nr, nr);
+            memcpy(nreq->headers_buf, tailbuf, nr);
             creq = nreq;
         }
         r = nr;
     }
 }
 
-static int ws_added_slice(ws_request_t *req, int size) {
+static int ws_body_slice(ws_request_t *req, int size) {
+    req->bodyposition += size;
+    if(req->bodyposition >= req->bodylen) {
+        req->reply_state = WS_R_EMPTY;
+
+        char *item = req->headerindex[WS_H_CONNECTION];
+        if(req->http_version == WS_HTTP_10) {
+            if(!item || strcasecmp(item, "Keep-Alive")) {
+                ws_graceful_finish(req->conn, FALSE);
+            }
+        } else {
+            if(item && !strcasecmp(item, "close")) {
+                ws_graceful_finish(req->conn, FALSE);
+            }
+        }
+        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_REQUEST];
+        if(cb) {
+            int res = cb(req);
+            if(res < 0) {
+                return -3;
+            }
+        }
+        return req->bodyposition - req->bodylen;
+    }
+    return 0;
+}
+
+static int ws_head_slice(ws_request_t *req, int size) {
     req->bufposition += size;
     char *e1 = memmem(req->headers_buf, size, "\r\n\r\n", 4);
     char *e2 = memmem(req->headers_buf, size, "\n\n", 2);
@@ -190,6 +237,8 @@ static int ws_added_slice(ws_request_t *req, int size) {
     *e1 = '\0';
     char *c = req->headers_buf;
     req->method = c;
+    if(*c == '\r') ++c;
+    if(*c == '\n') ++c;
     while(*++c && !isspace(*c));
     *c = '\0';
     if(c == e1) return -2;
@@ -241,6 +290,18 @@ static int ws_added_slice(ws_request_t *req, int size) {
     obstack_ptr_grow(&req->pieces, NULL);
     obstack_ptr_grow(&req->pieces, NULL);
     req->allheaders = obstack_finish(&req->pieces);
+
+    char *item = req->headerindex[WS_H_CONTENT_LENGTH];
+    if(item && strcmp(item, "0")) {
+        char *end;
+        req->bodylen = strtol(item, &end, 10);
+        if(end == item || *end != '\0') {
+            req->bodylen = 0;
+        }
+    } else {
+        req->bodylen = 0;
+    }
+
     ws_request_cb cb = req->req_callbacks[WS_REQ_CB_HEADERS];
     if(cb) {
         int res = cb(req);
@@ -248,38 +309,49 @@ static int ws_added_slice(ws_request_t *req, int size) {
             return -2;
         }
     }
-    req->reply_state = WS_R_EMPTY;
-
-    char *item = req->headerindex[WS_H_CONTENT_LENGTH];
-    if(item && strcmp(item, "0")) {
-        fprintf(stderr, "Post body not implemented yet\n");
-        return -3;
-    }
-    item = req->headerindex[WS_H_CONNECTION];
-    if(req->http_version == WS_HTTP_10) {
-        if(!item || strcasecmp(item, "Keep-Alive")) {
-            ws_graceful_finish(req->conn, FALSE);
+    if(req->bodylen <= req->bufposition - reallen) {
+        if(req->bodylen) {
+            req->body = req->headers_buf + reallen;
         }
+        req->reply_state = WS_R_EMPTY;
+
+        item = req->headerindex[WS_H_CONNECTION];
+        if(req->http_version == WS_HTTP_10) {
+            if(!item || strcasecmp(item, "Keep-Alive")) {
+                ws_graceful_finish(req->conn, FALSE);
+            }
+        } else {
+            if(item && !strcasecmp(item, "close")) {
+                ws_graceful_finish(req->conn, FALSE);
+            }
+        }
+        cb = req->req_callbacks[WS_REQ_CB_REQUEST];
+        if(cb) {
+            int res = cb(req);
+            if(res < 0) {
+                return -3;
+            }
+        }
+
+        return req->bufposition - reallen - req->bodylen;
     } else {
-        if(item && !strcasecmp(item, "close")) {
-            ws_graceful_finish(req->conn, FALSE);
+        if(req->bodylen + reallen <= req->conn->max_header_size) {
+            req->body = req->headers_buf + reallen;
+            req->bodyposition = req->bufposition - reallen;
+        } else {
+            req->body = obstack_alloc(&req->pieces, req->bodylen);
+            req->bodyposition = req->bufposition - reallen;
+            memcpy(req->body, req->headers_buf + reallen, req->bodyposition);
         }
+        return 0;
     }
-    cb = req->req_callbacks[WS_REQ_CB_REQUEST];
-    if(cb) {
-        int res = cb(req);
-        if(res < 0) {
-            return -3;
-        }
-    }
-
-    return req->bufposition - reallen;
 }
 
 static void ws_data_callback(struct ev_loop *loop, ws_connection_t *conn,
     int revents) {
     if(revents & EV_READ) {
-        if(!conn->last_req || conn->last_req->headerlen) {
+        if(!conn->last_req || conn->last_req->headerlen
+            && conn->last_req->bodyposition == conn->last_req->bodylen) {
             ws_request_new(conn);
         }
         ws_try_read(conn->last_req);
