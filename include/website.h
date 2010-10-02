@@ -138,6 +138,7 @@ int ws_statusline(ws_request_t *req, const char *line);
 int ws_add_header(ws_request_t *req, const char *name, const char *value);
 int ws_finish_headers(ws_request_t *req);
 int ws_reply_data(ws_request_t *req, const char *data, size_t data_size);
+int ws_request_free(ws_request_t *req);
 
 int ws_server_init(ws_server_t *serv, struct ev_loop *loop);
 int ws_add_tcp(ws_server_t *serv, in_addr_t addr, int port);

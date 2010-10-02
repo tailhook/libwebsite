@@ -65,11 +65,17 @@ static void ws_request_new(ws_connection_t *conn) {
     ++conn->request_num;
 }
 
-static void ws_request_free(ws_request_t *req) {
+int ws_request_free(ws_request_t *req) {
+    obstack_free(&req->pieces, NULL);
+    free(req);
+}
+
+static void ws_request_finish(ws_request_t *req) {
+    bool need_free = TRUE;
     if(req->headerlen) {
         ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
         if(cb) {
-            cb(req);
+            need_free = cb(req) <= 0;
         }
     }
     if(req->reply_watch.active) {
@@ -86,13 +92,14 @@ static void ws_request_free(ws_request_t *req) {
         req->conn->first_req = req->next;
     }
     req->conn->request_num -= 1;
-    obstack_free(&req->pieces, NULL);
-    free(req);
+    if(need_free) {
+        ws_request_free(req);
+    }
 }
 
 static void ws_connection_close(ws_connection_t *conn) {
     while(conn->first_req) {
-        ws_request_free(conn->first_req);
+        ws_request_finish(conn->first_req);
     };
     if(&conn->watcher.active) {
         ev_io_stop(conn->loop, &conn->watcher);
@@ -123,7 +130,7 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
     ev_io_stop(conn->loop, &conn->watcher);
     if(conn->request_num) {
         if(eat_last) {
-            ws_request_free(conn->last_req);
+            ws_request_finish(conn->last_req);
             if(conn->last_req) {
                 conn->close_on_finish = TRUE;
             } else {
@@ -567,7 +574,7 @@ static void ws_send_reply(struct ev_loop *loop,
             ev_io_stop(loop, watch);
         }
         ws_connection_t *conn = req->conn;
-        ws_request_free(req);
+        ws_request_finish(req);
         if(conn->first_req) {
             ws_start_reply(conn->first_req);
         } else if(conn->close_on_finish) {
