@@ -500,7 +500,7 @@ int ws_add_tcp(ws_server_t *serv, in_addr_t ip, int port) {
         &size, sizeof(size)) < 0) return -1;
     if(bind(fd, &addr, sizeof(addr)) < 0) return -1;
     if(listen(fd, 4096) < 0) return -1;
-    ws_add_fd(serv, fd);
+    return ws_add_fd(serv, fd);
 }
 
 int ws_add_unix(ws_server_t *serv, const char *filename, size_t len) {
@@ -514,7 +514,7 @@ int ws_add_unix(ws_server_t *serv, const char *filename, size_t len) {
         &size, sizeof(size)) < 0) return -1;
     if(bind(fd, &addr, sizeof(addr.sun_path)+len) < 0) return -1;
     if(listen(fd, 4096) < 0) return -1;
-    ws_add_fd(serv, fd);
+    return ws_add_fd(serv, fd);
 }
 
 int ws_index_header(ws_server_t *serv, const char *name) {

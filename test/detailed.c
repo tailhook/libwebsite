@@ -84,6 +84,9 @@ int main(int argc, char **argv) {
     struct ev_loop *loop = ev_default_loop(0);
     ws_server_t server;
     ws_server_init(&server, loop);
+    if(ws_add_tcp(&server, inet_addr("127.0.0.1"), 80) < 0) {
+        perror("Error binding port 80");
+    }
     ws_add_tcp(&server, inet_addr("127.0.0.1"), 8080);
     ws_add_unix(&server, "/tmp/ws_test_sock", strlen("/tmp/ws_test_sock"));
     //ws_add_fd(&server, 0);
