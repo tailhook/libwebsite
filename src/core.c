@@ -71,13 +71,6 @@ int ws_request_free(ws_request_t *req) {
 }
 
 static void ws_request_finish(ws_request_t *req) {
-    bool need_free = TRUE;
-    if(req->headerlen) {
-        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
-        if(cb) {
-            need_free = cb(req) <= 0;
-        }
-    }
     if(req->reply_watch.active) {
         ev_io_stop(req->conn->loop, &req->reply_watch);
     }
@@ -92,6 +85,13 @@ static void ws_request_finish(ws_request_t *req) {
         req->conn->first_req = req->next;
     }
     req->conn->request_num -= 1;
+    bool need_free = TRUE;
+    if(req->headerlen) {
+        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
+        if(cb) {
+            need_free = cb(req) <= 0;
+        }
+    }
     if(need_free) {
         ws_request_free(req);
     }
