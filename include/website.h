@@ -11,21 +11,27 @@ typedef int bool;
 
 #define ws_CONNECTION_STRUCT(targ, typ) (targ)->_conn_size = sizeof(typ)
 #define ws_REQUEST_STRUCT(targ, typ) (targ)->_req_size = sizeof(typ)
+#define ws_WSOCKMSG_STRUCT(targ, typ) (targ)->_wsock_message_size = sizeof(typ)
 #define ws_HEADERS_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_HEADERS] = (ws_request_cb)fun
 #define ws_REQUEST_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_REQUEST] = (ws_request_cb)fun
+#define ws_WEBSOCKET_CB(targ, fun) \
+    (targ)->req_callbacks[WS_REQ_CB_WEBSOCKET] = (ws_request_cb)fun
 #define ws_FINISH_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_FINISH] = (ws_request_cb)fun
 #define ws_CONNECT_CB(targ, fun) \
     (targ)->conn_callbacks[WS_CONN_CB_CONNECT] = (ws_connection_cb)fun
 #define ws_DISCONNECT_CB(targ, fun) \
     (targ)->conn_callbacks[WS_CONN_CB_DISCONNECT] = (ws_connection_cb)fun
+#define ws_MESSAGE_CB(targ, fun) \
+    (targ)->wsock_callbacks[WS_REQ_CB_MESSAGE] = (ws_websocket_cb)fun
 #define ws_SET_TIMEOUT(targ, value) (targ)->network_timeout = (value)
 
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
     WS_REQ_CB_REQUEST, // got request body
+    WS_REQ_CB_WEBSOCKET,
     WS_REQ_CB_FINISH, // response fully sent
     WS_REQ_CB_COUNT,
 } ws_request_cb_enum;
@@ -37,9 +43,18 @@ typedef enum {
 } ws_connection_cb_enum;
 
 typedef enum {
+    WS_WEBSOCKET_CB_MESSAGE,
+    WS_WEBSOCKET_CB_COUNT,
+} ws_websocket_cb_enum;
+
+typedef enum {
     WS_H_CONTENT_LENGTH,
     WS_H_CONNECTION,
     WS_H_UPGRADE,
+    WS_H_ORIGIN,
+    WS_H_WEBSOCKET_PROTO,
+    WS_H_WEBSOCKET_KEY1,
+    WS_H_WEBSOCKET_KEY2,
     WS_STD_HEADERS,
 } ws_header_enum;
 
@@ -58,8 +73,17 @@ typedef enum {
 struct ws_request_s;
 struct ws_connection_s;
 
+typedef struct ws_message_s {
+    int bufsize;
+    int bufposition;
+    size_t len;
+    char *data;
+} ws_message_t;
+
 typedef int (*ws_request_cb)(struct ws_request_s *req);
 typedef int (*ws_connection_cb)(struct ws_connection_s *conn);
+typedef int (*ws_websocket_cb)(struct ws_connection_s *conn,
+    struct ws_message_s *msg);
 
 typedef struct ws_header_pair_s {
     char *name;
@@ -107,11 +131,14 @@ typedef struct ws_connection_s {
     ev_tstamp network_timeout;
     int _req_size;
     int max_header_size;
+    int _wsock_message_size;
+    int max_wsock_message;
     struct ws_server_s *serv;
     struct ws_connection_s *next;
     struct ws_connection_s *prev;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
+    ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
     struct ws_request_s *first_req;
     struct ws_request_s *last_req;
     size_t request_num;
@@ -131,6 +158,7 @@ typedef struct ws_server_s {
     size_t connection_num;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
+    ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
     ws_hparser_t header_parser;
 } ws_server_t;
 

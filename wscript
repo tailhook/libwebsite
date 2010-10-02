@@ -81,6 +81,18 @@ def build(bld):
         bld(
             features     = ['cc', 'cprogram'],
             source       = [
+                'test/websocket.c',
+                ],
+            target       = 'websocket',
+            includes     = ['src', 'include'],
+            defines      = [],
+            ccflags      = ['-std=c99'],
+            libpath      = [bld.bdir+'/default'],
+            lib          = ['ev', 'website'],
+            )
+        bld(
+            features     = ['cc', 'cprogram'],
+            source       = [
                 'test/runtests.c',
                 ],
             target       = 'runtests',

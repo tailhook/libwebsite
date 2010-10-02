@@ -398,6 +398,8 @@ static void ws_connection_init(int fd, ws_server_t *serv,
         sizeof(conn->req_callbacks));
     memcpy(conn->conn_callbacks, serv->conn_callbacks,
         sizeof(conn->conn_callbacks));
+    memcpy(conn->wsock_callbacks, serv->wsock_callbacks,
+        sizeof(conn->wsock_callbacks));
     ev_io_init(&conn->watcher,
         (void (*)(struct ev_loop*, struct ev_io *,int))ws_data_callback,
         fd, EV_READ);
@@ -425,10 +427,8 @@ static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
     if(revents & EV_READ) {
         struct sockaddr_in addr;
         int addrlen = sizeof(addr);
-/*        int fd = accept4(l->watcher.fd, &addr, &addrlen,*/
-/*            SOCK_NONBLOCK|SOCK_CLOEXEC);*/
-        int fd = accept(l->watcher.fd, &addr, &addrlen);
-        //SOCK_NONBLOCK|SOCK_CLOEXEC);
+        int fd = accept4(l->watcher.fd, &addr, &addrlen,
+            SOCK_NONBLOCK|SOCK_CLOEXEC);
         if(fd < 0) {
             switch(fd) {
             case EAGAIN: case ENETDOWN: case EPROTO: case ENOPROTOOPT:
