@@ -17,6 +17,10 @@ char infopage[] = "<!DOCTYPE html>\n"
     "    </head>\n"
     "    <body>\n"
     "        <h1>Web socket test</h1>\n"
+    "        <script>\n"
+    "        var ws = new WebSocket('ws://' + location.host + '/chat');\n"
+    "        console.log(ws);\n"
+    "        </script>\n"
     "    </body>\n"
     "</html>\n";
 
@@ -30,10 +34,12 @@ int reply(ws_request_t *req) {
 }
 
 int websocket(ws_request_t *req) {
-
+    printf("WEBSOCKET\n");
+    return 0;
 }
 
 int message(const char *message, int len) {
+    printf("MESSAGE ``%s''\n", message);
 }
 
 int main(int argc, char **argv) {
