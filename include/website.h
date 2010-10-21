@@ -31,7 +31,7 @@ typedef int bool;
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
     WS_REQ_CB_REQUEST, // got request body
-    WS_REQ_CB_WEBSOCKET,
+    WS_REQ_CB_WEBSOCKET, // Request is actually a websocket
     WS_REQ_CB_FINISH, // response fully sent
     WS_REQ_CB_COUNT,
 } ws_request_cb_enum;
@@ -120,6 +120,7 @@ typedef struct ws_request_s {
     int _contlen_offset;
     char *reply_body;
     int reply_body_size;
+    bool websocket;
     struct ev_io reply_watch;
 } ws_request_t;
 

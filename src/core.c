@@ -45,6 +45,7 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->reply_body_size = 0;
     req->reply_pos = 0;
     req->reply_watch.active = 0;
+    req->websocket = FALSE;
 }
 
 static void ws_request_new(ws_connection_t *conn) {
@@ -196,6 +197,72 @@ static void ws_try_read(ws_request_t *req) {
     }
 }
 
+static int check_websocket(ws_request_t *req) {
+    unsigned k1 = 0, k2 = 0;
+    unsigned s1 = 0, s2 = 0;
+    for(char *c = req->headerindex[WS_H_WEBSOCKET_KEY1]; *c; ++c) {
+        if(isdigit(*c)) {
+            k1 = k1*10 + (unsigned)(*c - '0');
+        } else if(*c == ' ') {
+            s1 += 1;
+        }
+    }
+    for(char *c = req->headerindex[WS_H_WEBSOCKET_KEY2]; *c; ++c) {
+        if(isdigit(*c)) {
+            k2 = k2*10 + (unsigned)(*c - '0');
+        } else if(*c == ' ') {
+            s2 += 1;
+        }
+    }
+    if(k1 % s1 || k2 % s2) {
+        return -1;
+    }
+    return 0;
+}
+
+static int ws_enable_websocket(ws_request_t *req) {
+    ev_io_stop(req->conn->loop, &req->conn->watcher);
+/*    ev_io_cb(&conn->watcher, read_websocket);*/
+/*    ev_io_start(conn->loop, &conn->watcher);*/
+    unsigned k1 = 0, k2 = 0;
+    unsigned s1 = 0, s2 = 0;
+    for(char *c = req->headerindex[WS_H_WEBSOCKET_KEY1]; *c; ++c) {
+        if(isdigit(*c)) {
+            k1 = k1*10 + (unsigned)(*c - '0');
+        } else if(*c == ' ') {
+            s1 += 1;
+        }
+    }
+    for(char *c = req->headerindex[WS_H_WEBSOCKET_KEY2]; *c; ++c) {
+        if(isdigit(*c)) {
+            k2 = k2*10 + (unsigned)(*c - '0');
+        } else if(*c == ' ') {
+            s2 += 1;
+        }
+    }
+    if(k1 % s1 || k2 % s2) {
+        return -1;
+    }
+    unsigned p1 = k1 / s1;
+    unsigned p2 = k2 / s2;
+    char challenge[16];
+    *(unsigned*)challenge = htonl(p1);
+    *(unsigned*)(challenge+4) = htonl(p2);
+    memcpy(challenge+8, req->body, 8);
+    ws_statusline(req, "101 WebSocket Protocol Handshake");
+    ws_add_header(req, "Upgrade", "WebSocket");
+    ws_add_header(req, "Connection", "Upgrade");
+    ws_add_header(req, "Sec-WebSocket-Location", req->uri);
+    ws_add_header(req, "Sec-WebSocket-Origin",
+        req->headerindex[WS_H_ORIGIN]);
+    if(req->headerindex[WS_H_WEBSOCKET_PROTO]) {
+        ws_add_header(req, "Sec-WebSocket-Protocol",
+            req->headerindex[WS_H_WEBSOCKET_PROTO]);
+    }
+    ws_finish_headers(req);
+    ws_reply_data(req, obstack_copy(&req->pieces, challenge, 8), 8);
+}
+
 static int ws_body_slice(ws_request_t *req, int size) {
     req->bodyposition += size;
     if(req->bodyposition >= req->bodylen) {
@@ -211,14 +278,34 @@ static int ws_body_slice(ws_request_t *req, int size) {
                 ws_graceful_finish(req->conn, FALSE);
             }
         }
-        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_REQUEST];
-        if(cb) {
-            int res = cb(req);
-            if(res < 0) {
-                return -3;
+        if(req->websocket) {
+            int res = 0;
+            if(check_websocket(req) == 0) {
+                ws_request_cb cb = req->req_callbacks[WS_REQ_CB_WEBSOCKET];
+                if(cb) {
+                    res = cb(req);
+                } else {
+                    res = -1;
+                }
+            } else {
+                res = -1;
             }
+            if(res < 0) {
+                ws_graceful_finish(req->conn, TRUE);
+            } else {
+                ws_enable_websocket(req);
+            }
+            return 0;
+        } else {
+            ws_request_cb cb = req->req_callbacks[WS_REQ_CB_REQUEST];
+            if(cb) {
+                int res = cb(req);
+                if(res < 0) {
+                    return -3;
+                }
+            }
+            return req->bodyposition - req->bodylen;
         }
-        return req->bodyposition - req->bodylen;
     }
     return 0;
 }
@@ -308,12 +395,21 @@ static int ws_head_slice(ws_request_t *req, int size) {
     } else {
         req->bodylen = 0;
     }
-
-    ws_request_cb cb = req->req_callbacks[WS_REQ_CB_HEADERS];
-    if(cb) {
-        int res = cb(req);
-        if(res < 0) {
-            return -2;
+    if(req->headerindex[WS_H_UPGRADE]) {
+        if(!strcmp(req->headerindex[WS_H_UPGRADE], "WebSocket")) {
+            req->bodylen = 8;
+            req->websocket = TRUE;
+        } else {
+            ws_graceful_finish(req->conn, TRUE);
+            return 0;
+        }
+    } else {
+        ws_request_cb cb = req->req_callbacks[WS_REQ_CB_HEADERS];
+        if(cb) {
+            int res = cb(req);
+            if(res < 0) {
+                return -2;
+            }
         }
     }
     if(req->bodylen <= req->bufposition - reallen) {
@@ -332,15 +428,35 @@ static int ws_head_slice(ws_request_t *req, int size) {
                 ws_graceful_finish(req->conn, FALSE);
             }
         }
-        cb = req->req_callbacks[WS_REQ_CB_REQUEST];
-        if(cb) {
-            int res = cb(req);
-            if(res < 0) {
-                return -3;
+        if(req->websocket) {
+            int res = 0;
+            if(check_websocket(req) == 0) {
+                ws_request_cb cb = req->req_callbacks[WS_REQ_CB_WEBSOCKET];
+                if(cb) {
+                    res = cb(req);
+                } else {
+                    res = -1;
+                }
+            } else {
+                res = -1;
             }
-        }
+            if(res < 0) {
+                ws_graceful_finish(req->conn, TRUE);
+            } else {
+                ws_enable_websocket(req);
+            }
+            return 0;
+        } else {
+            ws_request_cb cb = req->req_callbacks[WS_REQ_CB_REQUEST];
+            if(cb) {
+                int res = cb(req);
+                if(res < 0) {
+                    return -3;
+                }
+            }
 
-        return req->bufposition - reallen - req->bodylen;
+            return req->bufposition - reallen - req->bodylen;
+        }
     } else {
         if(req->bodylen + reallen <= req->conn->max_header_size) {
             req->body = req->headers_buf + reallen;
@@ -468,6 +584,15 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     hindex = ws_match_iadd(serv->header_parser.index,
         "Upgrade", WS_H_UPGRADE);
     assert(hindex == WS_H_UPGRADE);
+    hindex = ws_match_iadd(serv->header_parser.index,
+        "Origin", WS_H_ORIGIN);
+    assert(hindex == WS_H_ORIGIN);
+    hindex = ws_match_iadd(serv->header_parser.index,
+        "Sec-WebSocket-Key1", WS_H_WEBSOCKET_KEY1);
+    assert(hindex == WS_H_WEBSOCKET_KEY1);
+    hindex = ws_match_iadd(serv->header_parser.index,
+        "Sec-WebSocket-Key2", WS_H_WEBSOCKET_KEY2);
+    assert(hindex == WS_H_WEBSOCKET_KEY2);
     bzero(serv->req_callbacks, sizeof(serv->req_callbacks));
     bzero(serv->conn_callbacks, sizeof(serv->conn_callbacks));
     return 0;
