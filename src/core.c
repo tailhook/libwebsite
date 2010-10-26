@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 
+#include <openssl/md5.h>
+
 #include "core.h"
 
 #define bool int
@@ -24,6 +26,9 @@
 static int ws_head_slice(ws_request_t *req, int size);
 static int ws_body_slice(ws_request_t *req, int size);
 static void ws_graceful_finish(ws_connection_t *conn, bool eat_last);
+static int ws_start_reply(ws_request_t *req);
+static void ws_send_reply(struct ev_loop *loop,
+    struct ev_io *watch, int revents);
 
 static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     obstack_init(&req->pieces);
@@ -44,7 +49,6 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->reply_body = NULL;
     req->reply_body_size = 0;
     req->reply_pos = 0;
-    req->reply_watch.active = 0;
     req->websocket = FALSE;
 }
 
@@ -72,9 +76,6 @@ int ws_request_free(ws_request_t *req) {
 }
 
 static void ws_request_finish(ws_request_t *req) {
-    if(req->reply_watch.active) {
-        ev_io_stop(req->conn->loop, &req->reply_watch);
-    }
     if(req->next) {
         req->next->prev = req->prev;
     } else {
@@ -86,6 +87,9 @@ static void ws_request_finish(ws_request_t *req) {
         req->conn->first_req = req->next;
     }
     req->conn->request_num -= 1;
+    if(!req->conn->request_num && req->conn->reply_watch.active) {
+        ev_io_stop(req->conn->loop, &req->conn->reply_watch);
+    }
     bool need_free = TRUE;
     if(req->headerlen) {
         ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
@@ -102,13 +106,10 @@ static void ws_connection_close(ws_connection_t *conn) {
     while(conn->first_req) {
         ws_request_finish(conn->first_req);
     };
-    if(&conn->watcher.active) {
-        ev_io_stop(conn->loop, &conn->watcher);
+    if(&conn->watch.active) {
+        ev_io_stop(conn->loop, &conn->watch);
     }
-    if(&conn->timeo.active) {
-        ev_timer_stop(conn->loop, &conn->timeo);
-    }
-    close(conn->watcher.fd);
+    close(conn->watch.fd);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_DISCONNECT];
     if(cb) {
         cb(conn);
@@ -127,8 +128,11 @@ static void ws_connection_close(ws_connection_t *conn) {
 }
 
 static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
-    shutdown(conn->watcher.fd, SHUT_RD);
-    ev_io_stop(conn->loop, &conn->watcher);
+    shutdown(conn->watch.fd, SHUT_RD);
+    ev_io_stop(conn->loop, &conn->watch);
+    if(conn->websocket_buf) {
+        free(conn->websocket_buf);
+    }
     if(conn->request_num) {
         if(eat_last) {
             ws_request_finish(conn->last_req);
@@ -149,10 +153,10 @@ static void ws_try_read(ws_request_t *req) {
     int r;
     if(req->headerlen) {
         assert(req->body);
-        r = read(req->conn->watcher.fd, req->body+req->bodyposition,
+        r = read(req->conn->watch.fd, req->body+req->bodyposition,
             req->bodylen - req->bodyposition);
     } else {
-        r = read(req->conn->watcher.fd, req->headers_buf+req->bufposition,
+        r = read(req->conn->watch.fd, req->headers_buf+req->bufposition,
             req->conn->max_header_size - req->bufposition);
     }
 
@@ -220,10 +224,49 @@ static int check_websocket(ws_request_t *req) {
     return 0;
 }
 
+static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
+    int revents) {
+    ws_connection_t *conn = (ws_connection_t *)((char *)watch
+        - offsetof(ws_connection_t, watch));
+    if(revents & EV_READ) {
+        printf("READ\n");
+        int r = read(conn->watch.fd, conn->websocket_buf,
+            conn->websocket_buf_size - conn->websocket_buf_offset);
+        if(r < 0) {
+            switch(errno) {
+                case EAGAIN:
+                case EINTR:
+                    return;
+                default:
+                    ws_connection_close(conn);
+                    return;
+            }
+        }
+        if(r == 0) {
+            ws_connection_close(conn);
+            return;
+        }
+        char *end = conn->websocket_buf + conn->websocket_buf_offset;
+        conn->websocket_buf_offset += r;
+        if(conn->websocket_buf[0] != '\x00') {
+            ws_connection_close(conn);
+            return
+        }
+        if(memchr(conn->websocket_buf, '\xFF', conn->websocket_buf_offset)) {
+            // TODO: got message
+        }
+    }
+}
+
 static int ws_enable_websocket(ws_request_t *req) {
-    ev_io_stop(req->conn->loop, &req->conn->watcher);
-/*    ev_io_cb(&conn->watcher, read_websocket);*/
-/*    ev_io_start(conn->loop, &conn->watcher);*/
+    ev_io_stop(req->conn->loop, &req->conn->watch);
+    assert(req->conn->last_req == req);
+
+    req->conn->websocket_buf_size = req->conn->max_message_size;
+    req->conn->websocket_buf = malloc(req->conn->websocket_buf_size);
+    if(!req->conn->websocket_buf) {
+        return -1;
+    }
     unsigned k1 = 0, k2 = 0;
     unsigned s1 = 0, s2 = 0;
     for(char *c = req->headerindex[WS_H_WEBSOCKET_KEY1]; *c; ++c) {
@@ -249,10 +292,15 @@ static int ws_enable_websocket(ws_request_t *req) {
     *(unsigned*)challenge = htonl(p1);
     *(unsigned*)(challenge+4) = htonl(p2);
     memcpy(challenge+8, req->body, 8);
+    char *md5 = obstack_alloc(&req->pieces, 16);
+    MD5(challenge, 16, md5);
     ws_statusline(req, "101 WebSocket Protocol Handshake");
     ws_add_header(req, "Upgrade", "WebSocket");
     ws_add_header(req, "Connection", "Upgrade");
-    ws_add_header(req, "Sec-WebSocket-Location", req->uri);
+    char buf[4096];
+    snprintf(buf, 4096, "ws://%s%s", req->headerindex[WS_H_HOST], req->uri);
+    buf[4096] = 0;
+    ws_add_header(req, "Sec-WebSocket-Location", buf);
     ws_add_header(req, "Sec-WebSocket-Origin",
         req->headerindex[WS_H_ORIGIN]);
     if(req->headerindex[WS_H_WEBSOCKET_PROTO]) {
@@ -260,7 +308,11 @@ static int ws_enable_websocket(ws_request_t *req) {
             req->headerindex[WS_H_WEBSOCKET_PROTO]);
     }
     ws_finish_headers(req);
-    ws_reply_data(req, obstack_copy(&req->pieces, challenge, 8), 8);
+    ws_reply_data(req, md5, 16);
+
+    ev_set_cb(&req->conn->watch, read_websocket);
+    ev_io_start(req->conn->loop, &req->conn->watch);
+    return 0;
 }
 
 static int ws_body_slice(ws_request_t *req, int size) {
@@ -290,10 +342,8 @@ static int ws_body_slice(ws_request_t *req, int size) {
             } else {
                 res = -1;
             }
-            if(res < 0) {
+            if(res < 0 || ws_enable_websocket(req) < 0) {
                 ws_graceful_finish(req->conn, TRUE);
-            } else {
-                ws_enable_websocket(req);
             }
             return 0;
         } else {
@@ -440,10 +490,8 @@ static int ws_head_slice(ws_request_t *req, int size) {
             } else {
                 res = -1;
             }
-            if(res < 0) {
+            if(res < 0 || ws_enable_websocket(req) < 0) {
                 ws_graceful_finish(req->conn, TRUE);
-            } else {
-                ws_enable_websocket(req);
             }
             return 0;
         } else {
@@ -470,24 +518,16 @@ static int ws_head_slice(ws_request_t *req, int size) {
     }
 }
 
-static void ws_data_callback(struct ev_loop *loop, ws_connection_t *conn,
+static void ws_data_callback(struct ev_loop *loop, struct ev_io *watch,
     int revents) {
+    ws_connection_t *conn = (ws_connection_t *)((char *)watch
+        - offsetof(ws_connection_t, watch));
     if(revents & EV_READ) {
         if(!conn->last_req || conn->last_req->headerlen
             && conn->last_req->bodyposition == conn->last_req->bodylen) {
             ws_request_new(conn);
         }
         ws_try_read(conn->last_req);
-    }
-    assert(!(revents & EV_ERROR));
-}
-
-static void ws_data_timeout(struct ev_loop *loop, ev_timer *timer,
-    int revents) {
-    ws_connection_t *conn = (ws_connection_t*)((char *)timer
-        - offsetof(ws_connection_t, timeo));
-    if(revents & EV_TIMER) {
-    // TODO
     }
     assert(!(revents & EV_ERROR));
 }
@@ -506,20 +546,26 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     conn->serv = serv;
     conn->loop = serv->loop;
     conn->max_header_size = serv->max_header_size;
+    conn->max_message_size = serv->max_message_size;
     conn->close_on_finish = FALSE;
     conn->last_req = NULL;
     conn->first_req = NULL;
     conn->request_num = 0;
+    conn->websocket_buf = NULL;
+    conn->websocket_buf_size = 0;
+    conn->websocket_buf_offset = 0;
     memcpy(conn->req_callbacks, serv->req_callbacks,
         sizeof(conn->req_callbacks));
     memcpy(conn->conn_callbacks, serv->conn_callbacks,
         sizeof(conn->conn_callbacks));
     memcpy(conn->wsock_callbacks, serv->wsock_callbacks,
         sizeof(conn->wsock_callbacks));
-    ev_io_init(&conn->watcher,
+    ev_io_init(&conn->watch,
         (void (*)(struct ev_loop*, struct ev_io *,int))ws_data_callback,
         fd, EV_READ);
-    ev_timer_init(&conn->timeo, ws_data_timeout, conn->network_timeout, 0);
+    ev_io_init(&conn->reply_watch,
+        (void (*)(struct ev_loop*, struct ev_io *,int))ws_send_reply,
+        fd, EV_WRITE);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_CONNECT];
     if(cb && cb(conn) < 0) {
         close(fd);
@@ -534,8 +580,7 @@ static void ws_connection_init(int fd, ws_server_t *serv,
         serv->first_conn = conn;
     }
     serv->last_conn = conn;
-    ev_io_start(serv->loop, &conn->watcher);
-    ev_timer_start(serv->loop, &conn->timeo);
+    ev_io_start(serv->loop, &conn->watch);
 }
 
 static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
@@ -543,7 +588,7 @@ static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
     if(revents & EV_READ) {
         struct sockaddr_in addr;
         int addrlen = sizeof(addr);
-        int fd = accept4(l->watcher.fd, &addr, &addrlen,
+        int fd = accept4(l->watch.fd, &addr, &addrlen,
             SOCK_NONBLOCK|SOCK_CLOEXEC);
         if(fd < 0) {
             switch(fd) {
@@ -565,6 +610,7 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     serv->loop = loop;
     serv->_conn_size = sizeof(ws_connection_t);
     serv->_req_size = sizeof(ws_request_t);
+    serv->_message_size = sizeof(ws_message_t);
     serv->listeners = NULL;
     serv->listeners_num = 0;
     serv->first_conn = NULL;
@@ -572,9 +618,13 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     serv->connection_num = 0;
     serv->network_timeout = 10.0;
     serv->max_header_size = 16384;
+    serv->max_message_size = 16384;
     serv->header_parser.index = ws_match_new();
     serv->header_parser.count = WS_STD_HEADERS;
     int hindex;
+    hindex = ws_match_iadd(serv->header_parser.index,
+        "Host", WS_H_HOST);
+    assert(hindex == WS_H_HOST);
     hindex = ws_match_iadd(serv->header_parser.index,
         "Content-Length", WS_H_CONTENT_LENGTH);
     assert(hindex == WS_H_CONTENT_LENGTH);
@@ -607,7 +657,7 @@ int ws_add_fd(ws_server_t *serv, int fd) {
     if(!l) {
         return -1;
     }
-    ev_io_init(&l->watcher,
+    ev_io_init(&l->watch,
         (void (*)(struct ev_loop*, ev_io *, int))ws_accept_callback,
         fd, EV_READ);
     l->serv = serv;
@@ -616,7 +666,7 @@ int ws_add_fd(ws_server_t *serv, int fd) {
     serv->listeners = l;
     serv->listeners_num += 1;
 
-    ev_io_start(serv->loop, &l->watcher);
+    ev_io_start(serv->loop, &l->watch);
     return 0;
 }
 
@@ -658,12 +708,10 @@ int ws_index_header(ws_server_t *serv, const char *name) {
     return res;
 }
 
-static int ws_start_reply(ws_request_t *req);
-
 static void ws_send_reply(struct ev_loop *loop,
     struct ev_io *watch, int revents) {
-    ws_request_t *req = (ws_request_t*)(((char *)watch)
-        - offsetof(ws_request_t, reply_watch));
+    ws_request_t *req = ((ws_connection_t*)(((char *)watch)
+        - offsetof(ws_connection_t, reply_watch)))->first_req;
     if(revents & EV_WRITE) {
         assert(req->reply_head_size);
         int res;
@@ -719,9 +767,7 @@ static int ws_start_reply(ws_request_t *req) {
         return -1;
     }
     req->reply_state = WS_R_SENDING;
-    ev_io_init(&req->reply_watch, ws_send_reply,
-        req->conn->watcher.fd, EV_WRITE);
-    ev_io_start(req->conn->loop, &req->reply_watch);
+    ev_io_start(req->conn->loop, &req->conn->reply_watch);
     return 0;
 }
 
@@ -751,12 +797,14 @@ int ws_statusline(ws_request_t *req, const char *line) {
     obstack_grow(&req->pieces, line, strlen(line));
     obstack_grow(&req->pieces, "\r\n", 2);
     req->reply_state = WS_R_STATUS;
-    ws_add_header(req, "Content-Length", "           0");
-    req->_contlen_offset = obstack_object_size(&req->pieces)-14;
-    if(req->conn->close_on_finish && req->conn->last_req == req) {
-        ws_add_header(req, "Connection", "close");
-    } else {
-        ws_add_header(req, "Connection", "Keep-Alive");
+    if(!req->websocket) {
+        ws_add_header(req, "Content-Length", "           0");
+        req->_contlen_offset = obstack_object_size(&req->pieces)-14;
+        if(req->conn->close_on_finish && req->conn->last_req == req) {
+            ws_add_header(req, "Connection", "close");
+        } else {
+            ws_add_header(req, "Connection", "Keep-Alive");
+        }
     }
 }
 
@@ -816,9 +864,11 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
     }
     req->reply_body = (char *)data;
     req->reply_body_size = len;
-    int lenlen = sprintf(req->reply_head + req->_contlen_offset, "%12d", len);
-    assert(lenlen == 12);
-    *(req->reply_head + req->_contlen_offset+12) = '\r';
+    if(!req->websocket) {
+        int lenlen = sprintf(req->reply_head + req->_contlen_offset, "%12d", len);
+        assert(lenlen == 12);
+        *(req->reply_head + req->_contlen_offset+12) = '\r';
+    }
     req->reply_state = WS_R_BODY;
     if(!req->prev) {
         ws_start_reply(req);

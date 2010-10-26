@@ -6,6 +6,7 @@ import socket
 import time
 
 bin = os.path.join('.', 'build', 'default', 'simple')
+websockbin = os.path.join('.', 'build', 'default', 'websocket')
 
 sample_output = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          130\r\n'
@@ -30,6 +31,23 @@ sample_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
     b'</html>\n\x00')
+
+websock_request = (b'GET /echo HTTP/1.1\r\n'
+    b'Host: localhost:8080\r\n'
+    b'Connection: Upgrade\r\n'
+    b'Sec-WebSocket-Key2: 12998 5 Y3 1  .P00\r\n'
+    b'Upgrade: WebSocket\r\n'
+    b'Sec-WebSocket-Key1: 4 @1  46546xW%0l 1 5\r\n'
+    b'Origin: http://localhost\r\n'
+    b'\r\n'
+    b'^n:ds[4U')
+websock_response = (b'HTTP/1.1 101 WebSocket Protocol Handshake\r\n'
+    b'Upgrade: WebSocket\r\n'
+    b'Connection: Upgrade\r\n'
+    b'Sec-WebSocket-Location: ws://localhost:8080/echo\r\n'
+    b'Sec-WebSocket-Origin: http://localhost\r\n'
+    b'\r\n'
+    b'8jKS\'y:G*Co,Wxa-')
 
 class HTTP(unittest.TestCase):
 
@@ -152,6 +170,24 @@ class HTTP(unittest.TestCase):
         time.sleep(0.1)
         resp = sock.recv(4096)
         self.assertEquals(resp, sample_output2+sample_output)
+
+class WebSocket(unittest.TestCase):
+
+    def setUp(self):
+        self.proc = subprocess.Popen(websockbin)
+        time.sleep(0.1)
+
+    def tearDown(self):
+        self.proc.terminate()
+        self.proc.wait()
+        time.sleep(0.1)
+
+    def testHandshake(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(websock_request)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_response)
 
 if __name__ == '__main__':
     unittest.main()

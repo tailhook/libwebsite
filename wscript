@@ -52,7 +52,7 @@ def build(bld):
             defines      = [],
             ccflags      = ['-std=c99'],
             libpath      = [bld.bdir+'/default'],
-            lib          = ['ev', 'website'],
+            lib          = ['ev', 'website', 'crypto'],
             )
         bld(
             features     = ['cc', 'cprogram'],
@@ -64,7 +64,7 @@ def build(bld):
             defines      = [],
             ccflags      = ['-std=c99'],
             libpath      = [bld.bdir+'/default'],
-            lib          = ['ev', 'website'],
+            lib          = ['ev', 'website', 'crypto'],
             )
         bld(
             features     = ['cc', 'cprogram'],
@@ -76,7 +76,7 @@ def build(bld):
             defines      = [],
             ccflags      = ['-std=c99'],
             libpath      = [bld.bdir+'/default'],
-            lib          = ['ev', 'website'],
+            lib          = ['ev', 'website', 'crypto'],
             )
         bld(
             features     = ['cc', 'cprogram'],
@@ -88,7 +88,7 @@ def build(bld):
             defines      = [],
             ccflags      = ['-std=c99'],
             libpath      = [bld.bdir+'/default'],
-            lib          = ['ev', 'website'],
+            lib          = ['ev', 'website', 'crypto'],
             )
         bld(
             features     = ['cc', 'cprogram'],

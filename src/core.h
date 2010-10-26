@@ -15,7 +15,7 @@ typedef enum {
 } ws_reply_state;
 
 typedef struct ws_listener_s {
-    ev_io watcher;
+    ev_io watch;
     struct ws_listener_s *next;
     ws_server_t *serv;
 } ws_listener_t;

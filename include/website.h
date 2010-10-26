@@ -11,7 +11,7 @@ typedef int bool;
 
 #define ws_CONNECTION_STRUCT(targ, typ) (targ)->_conn_size = sizeof(typ)
 #define ws_REQUEST_STRUCT(targ, typ) (targ)->_req_size = sizeof(typ)
-#define ws_WSOCKMSG_STRUCT(targ, typ) (targ)->_wsock_message_size = sizeof(typ)
+#define ws_MESSAGE_STRUCT(targ, typ) (targ)->_message_size = sizeof(typ)
 #define ws_HEADERS_CB(targ, fun) \
     (targ)->req_callbacks[WS_REQ_CB_HEADERS] = (ws_request_cb)fun
 #define ws_REQUEST_CB(targ, fun) \
@@ -48,6 +48,7 @@ typedef enum {
 } ws_websocket_cb_enum;
 
 typedef enum {
+    WS_H_HOST,
     WS_H_CONTENT_LENGTH,
     WS_H_CONNECTION,
     WS_H_UPGRADE,
@@ -74,10 +75,9 @@ struct ws_request_s;
 struct ws_connection_s;
 
 typedef struct ws_message_s {
-    int bufsize;
-    int bufposition;
-    size_t len;
+    size_t length;
     char *data;
+    void (*free_cb)(void *);
 } ws_message_t;
 
 typedef int (*ws_request_cb)(struct ws_request_s *req);
@@ -98,7 +98,11 @@ typedef struct ws_hparser_s {
 typedef struct ws_request_s {
     struct obstack pieces;
     struct ws_connection_s *conn;
+    struct ws_request_s *next;
+    struct ws_request_s *prev;
+
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
+    ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
     ev_tstamp network_timeout;
     char *headers_buf;
     int bufposition;
@@ -110,8 +114,7 @@ typedef struct ws_request_s {
     char *method;
     ws_version_enum http_version;
     ws_header_pair_t *allheaders;
-    struct ws_request_s *next;
-    struct ws_request_s *prev;
+
     char **headerindex;
     int reply_pos;
     int reply_state;
@@ -120,20 +123,20 @@ typedef struct ws_request_s {
     int _contlen_offset;
     char *reply_body;
     int reply_body_size;
+
     bool websocket;
-    struct ev_io reply_watch;
 } ws_request_t;
 
 typedef struct ws_connection_s {
-    struct ev_io watcher;
-    struct ev_timer timeo;
     struct ev_loop *loop;
+    struct ev_io watch;
+    struct ev_io reply_watch;
     struct sockaddr_in addr;
     ev_tstamp network_timeout;
     int _req_size;
     int max_header_size;
-    int _wsock_message_size;
-    int max_wsock_message;
+    int _message_size;
+    int max_message_size;
     struct ws_server_s *serv;
     struct ws_connection_s *next;
     struct ws_connection_s *prev;
@@ -144,6 +147,9 @@ typedef struct ws_connection_s {
     struct ws_request_s *last_req;
     size_t request_num;
     int close_on_finish;
+    char *websocket_buf;
+    size_t websocket_buf_size;
+    size_t websocket_buf_offset;
 } ws_connection_t;
 
 typedef struct ws_server_s {
@@ -152,6 +158,8 @@ typedef struct ws_server_s {
     int max_header_size;
     int _conn_size;
     int _req_size;
+    int _message_size;
+    int max_message_size;
     struct ws_listener_s *listeners;
     size_t listeners_num;
     struct ws_connection_s *first_conn;
