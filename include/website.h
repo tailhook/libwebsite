@@ -27,6 +27,8 @@ typedef int bool;
 #define ws_MESSAGE_CB(targ, fun) \
     (targ)->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE] = (ws_websocket_cb)fun
 #define ws_SET_TIMEOUT(targ, value) (targ)->network_timeout = (value)
+#define ws_MESSAGE_INCREF(val) (++(val)->refcnt)
+#define ws_MESSAGE_DECREF(val) if(!--(val)->refcnt) ws_message_free(val)
 
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
@@ -75,6 +77,7 @@ struct ws_request_s;
 struct ws_connection_s;
 
 typedef struct ws_message_s {
+    size_t refcnt;
     size_t length;
     char *data;
     void (*free_cb)(void *);
@@ -137,6 +140,7 @@ typedef struct ws_connection_s {
     int max_header_size;
     int _message_size;
     int max_message_size;
+    int max_message_queue;
     struct ws_server_s *serv;
     struct ws_connection_s *next;
     struct ws_connection_s *prev;
@@ -150,6 +154,11 @@ typedef struct ws_connection_s {
     char *websocket_buf;
     size_t websocket_buf_size;
     size_t websocket_buf_offset;
+    ws_message_t **websocket_queue;
+    size_t websocket_queue_size;
+    size_t websocket_qstart;
+    size_t websocket_qlen;
+    size_t websocket_queue_offset; // offset INSIDE the current message
 } ws_connection_t;
 
 typedef struct ws_server_s {
@@ -160,6 +169,7 @@ typedef struct ws_server_s {
     int _req_size;
     int _message_size;
     int max_message_size;
+    int max_message_queue;
     struct ws_listener_s *listeners;
     size_t listeners_num;
     struct ws_connection_s *first_conn;
@@ -183,6 +193,8 @@ int ws_add_unix(ws_server_t *serv, const char *filename, size_t len);
 int ws_add_fd(ws_server_t *serv, int fd);
 int ws_index_header(ws_server_t *serv, const char *name);
 int ws_server_start(ws_server_t *serv);
+
+int ws_message_send(ws_connection_t *conn, ws_message_t *msg);
 
 void ws_quickstart(ws_server_t *serv, const char *hostname,
     int port, ws_request_cb cb);
