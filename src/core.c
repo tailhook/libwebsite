@@ -114,6 +114,16 @@ static void ws_connection_close(ws_connection_t *conn) {
     if(cb) {
         cb(conn);
     }
+    if(conn->websocket_buf) {
+        for(int i = conn->websocket_qlen, j = conn->websocket_qstart;
+            i > 0; --i, ++j) {
+            if(j >= conn->websocket_queue_size) {
+                j -= conn->websocket_queue_size;
+            }
+            ws_MESSAGE_DECREF(conn->websocket_queue[j]);
+        }
+        free(conn->websocket_buf);
+    }
     if(conn->next) {
         conn->next->prev = conn->prev;
     } else {
@@ -356,6 +366,7 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
         }
         conn->websocket_queue_offset += res;
         if(conn->websocket_queue_offset >= msg->length+2) {
+            ws_MESSAGE_DECREF(msg);
             conn->websocket_qstart += 1;
             if(!--conn->websocket_qlen) {
                 ev_io_stop(conn->loop, &conn->reply_watch);

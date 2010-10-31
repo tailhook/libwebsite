@@ -194,7 +194,10 @@ int ws_add_fd(ws_server_t *serv, int fd);
 int ws_index_header(ws_server_t *serv, const char *name);
 int ws_server_start(ws_server_t *serv);
 
+ws_message_t *ws_message_copy_data(ws_connection_t *conn,
+    void *data, size_t len);
 int ws_message_send(ws_connection_t *conn, ws_message_t *msg);
+void ws_message_free(ws_message_t *msg);
 
 void ws_quickstart(ws_server_t *serv, const char *hostname,
     int port, ws_request_cb cb);
