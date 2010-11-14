@@ -27,8 +27,8 @@ typedef int bool;
 #define ws_MESSAGE_CB(targ, fun) \
     (targ)->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE] = (ws_websocket_cb)fun
 #define ws_SET_TIMEOUT(targ, value) (targ)->network_timeout = (value)
-#define ws_MESSAGE_DATA(msg, data, len, free_fun) \
-    (msg)->data = data; \
+#define ws_MESSAGE_DATA(msg, ptr, len, free_fun) \
+    (msg)->data = ptr; \
     (msg)->length = len; \
     (msg)->free_cb = free_fun;
 #define ws_MESSAGE_INCREF(val) (++(val)->refcnt)
