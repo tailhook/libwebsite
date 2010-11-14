@@ -237,6 +237,7 @@ static int check_websocket(ws_request_t *req) {
 ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     void *data, size_t len) {
     ws_message_t *res = (ws_message_t *)malloc(conn->_message_size+len+1);
+    if(!res) return NULL;
     memcpy((char *)res + conn->_message_size, data, len);
     res->refcnt = 1;
     res->data = (char *)res + conn->_message_size;
@@ -246,9 +247,19 @@ ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     return res;
 }
 
+ws_message_t *ws_message_new(ws_connection_t *conn) {
+    ws_message_t *res = (ws_message_t *)malloc(conn->_message_size);
+    if(!res) return NULL;
+    res->refcnt = 1;
+    res->data = NULL;
+    res->length = 0;
+    res->free_cb = NULL;
+    return res;
+}
+
 void ws_message_free(ws_message_t *msg) {
     if(msg->free_cb) {
-        msg->free_cb(msg->data);
+        msg->free_cb(msg);
     }
     free(msg);
 }

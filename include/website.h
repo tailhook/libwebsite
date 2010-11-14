@@ -27,6 +27,10 @@ typedef int bool;
 #define ws_MESSAGE_CB(targ, fun) \
     (targ)->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE] = (ws_websocket_cb)fun
 #define ws_SET_TIMEOUT(targ, value) (targ)->network_timeout = (value)
+#define ws_MESSAGE_DATA(msg, data, len, free_fun) \
+    (msg)->data = data; \
+    (msg)->length = len; \
+    (msg)->free_cb = free_fun;
 #define ws_MESSAGE_INCREF(val) (++(val)->refcnt)
 #define ws_MESSAGE_DECREF(val) if(!--(val)->refcnt) ws_message_free(val)
 
@@ -196,6 +200,7 @@ int ws_server_start(ws_server_t *serv);
 
 ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     void *data, size_t len);
+ws_message_t *ws_message_new(ws_connection_t *conn);
 int ws_message_send(ws_connection_t *conn, ws_message_t *msg);
 void ws_message_free(ws_message_t *msg);
 
