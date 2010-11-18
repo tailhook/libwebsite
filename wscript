@@ -3,7 +3,7 @@
 import Scripting, Options
 
 APPNAME='libwebsite'
-VERSION='0.2.3'
+VERSION='0.2.4'
 
 top = '.'
 out = 'build'
