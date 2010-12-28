@@ -798,6 +798,17 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     return 0;
 }
 
+int ws_server_destroy(ws_server_t *serv) {
+    ws_match_free(serv->header_parser.index);
+    for(ws_listener_t *p, *l=serv->listeners; l; p = l, l = l->next, free(p)) {
+        if(l->watch.active) {
+            ev_io_stop(serv->loop, &l->watch);
+            close(l->watch.fd);
+        }
+    }
+    return 0;
+}
+
 int ws_server_start(ws_server_t *serv) {
     ws_match_compile(serv->header_parser.index);
 }

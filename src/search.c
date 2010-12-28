@@ -21,6 +21,12 @@ void *ws_match_new() {
     return box;
 }
 
+void ws_match_free(void *hint) {
+    ws_match_box_t *box = hint;
+    obstack_free(&box->pieces, NULL);
+    free(box);
+}
+
 size_t ws_match_add(void *rbox, const char *value, size_t result) {
     ws_match_box_t *box = (ws_match_box_t*)rbox;
     assert(!box->hash_size);
@@ -170,6 +176,11 @@ void *ws_fuzzy_new() {
     box->last = NULL;
     box->maxlen = 0;
     return box;
+}
+void ws_fuzzy_free(void *hint) {
+    ws_fuzzy_box_t *box = hint;
+    obstack_free(&box->pieces, NULL);
+    free(box);
 }
 
 size_t ws_fuzzy_add(void *rbox, const char *value, bool prefix, size_t result) {

@@ -192,6 +192,7 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t data_size);
 int ws_request_free(ws_request_t *req);
 
 int ws_server_init(ws_server_t *serv, struct ev_loop *loop);
+int ws_server_destroy(ws_server_t *serv);
 int ws_add_tcp(ws_server_t *serv, in_addr_t addr, int port);
 int ws_add_unix(ws_server_t *serv, const char *filename, size_t len);
 int ws_add_fd(ws_server_t *serv, int fd);
@@ -209,6 +210,7 @@ void ws_quickstart(ws_server_t *serv, const char *hostname,
     int port, ws_request_cb cb);
 
 void *ws_match_new();
+void ws_match_free(void *hint);
 size_t ws_match_add(void *box, const char *string, size_t result);
 size_t ws_match_iadd(void *box, const char *string, size_t result);
 int ws_match_compile(void *box);
@@ -216,6 +218,7 @@ bool ws_match(void *box, const char *string, size_t *result);
 bool ws_imatch(void *box, const char *string, size_t *result);
 
 void *ws_fuzzy_new();
+void ws_fuzzy_free(void *hint);
 size_t ws_fuzzy_add(void *box, const char *string, bool prefix, size_t result);
 size_t ws_fuzzy_iadd(void *box, const char *string, bool prefix, size_t result);
 int ws_fuzzy_compile(void *box);
