@@ -31,8 +31,15 @@ typedef int bool;
     (msg)->data = ptr; \
     (msg)->length = len; \
     (msg)->free_cb = free_fun;
+
+#ifndef WS_NO_ATOMIC_REFCNT
+#define ws_MESSAGE_INCREF(val) (__sync_add_and_fetch(&(val)->refcnt, 1))
+#define ws_MESSAGE_DECREF(val) if(!__sync_sub_and_fetch(&(val)->refcnt, 1))\
+    ws_message_free(val);
+#else
 #define ws_MESSAGE_INCREF(val) (++(val)->refcnt)
 #define ws_MESSAGE_DECREF(val) if(!--(val)->refcnt) ws_message_free(val)
+#endif
 
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
