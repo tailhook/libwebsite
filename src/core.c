@@ -82,7 +82,7 @@ static void ws_request_finish(ws_request_t *req) {
         req->conn->last_req = req->prev;
     }
     if(req->prev) {
-        req->prev->next = req->prev;
+        req->prev->next = req->next;
     } else {
         req->conn->first_req = req->next;
     }
