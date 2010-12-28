@@ -201,6 +201,7 @@ int ws_server_start(ws_server_t *serv);
 ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     void *data, size_t len);
 ws_message_t *ws_message_new(ws_connection_t *conn);
+int ws_message_init(ws_message_t *msg);
 int ws_message_send(ws_connection_t *conn, ws_message_t *msg);
 void ws_message_free(ws_message_t *msg);
 

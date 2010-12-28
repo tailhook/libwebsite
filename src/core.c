@@ -250,12 +250,21 @@ ws_message_t *ws_message_copy_data(ws_connection_t *conn,
 ws_message_t *ws_message_new(ws_connection_t *conn) {
     ws_message_t *res = (ws_message_t *)malloc(conn->_message_size);
     if(!res) return NULL;
+    if(ws_message_init(res)) {
+        free(res);
+        return NULL;
+    }
+    return res;
+}
+
+int ws_message_init(ws_message_t *res) {
     res->refcnt = 1;
     res->data = NULL;
     res->length = 0;
     res->free_cb = NULL;
-    return res;
+    return 0;
 }
+
 
 void ws_message_free(ws_message_t *msg) {
     if(msg->free_cb) {
