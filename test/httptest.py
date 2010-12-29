@@ -5,8 +5,10 @@ import unittest
 import socket
 import time
 
-bin = os.path.join('.', 'build', 'default', 'simple')
-websockbin = os.path.join('.', 'build', 'default', 'websocket')
+bin = os.environ.get('SIMPLE_BIN',
+    os.path.join('.', 'build', 'test', 'simple'))
+websockbin = os.environ.get('WEBSOCK_BIN',
+    os.path.join('.', 'build', 'test', 'websocket'))
 
 sample_output = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          130\r\n'
