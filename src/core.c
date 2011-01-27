@@ -389,6 +389,9 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
             ws_MESSAGE_DECREF(msg);
             conn->websocket_queue_offset = 0;
             conn->websocket_qstart += 1;
+            if(conn->websocket_qstart >= conn->websocket_queue_size) {
+                conn->websocket_qstart -= conn->websocket_queue_size;
+            }
             if(!--conn->websocket_qlen) {
                 ev_io_stop(conn->loop, &conn->reply_watch);
             }
