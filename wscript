@@ -38,6 +38,8 @@ def build(bld):
     bld.install_files('${PREFIX}/include', 'include/website.h')
 
 def build_tests(bld):
+    build(bld)
+    bld.add_group()
     bld(
         features     = ['c', 'cprogram'],
         source       = [
@@ -46,7 +48,8 @@ def build_tests(bld):
         target       = 'simple',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        lib          = ['ev', 'website', 'crypto'],
+        linkflags    = ['-g', 'libwebsite.a'],
+        lib          = ['ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -57,7 +60,8 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         defines      = [],
         cflags       = ['-std=c99'],
-        lib          = ['ev', 'website', 'crypto'],
+        linkflags    = ['-g', 'libwebsite.a'],
+        lib          = ['ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -67,7 +71,8 @@ def build_tests(bld):
         target       = 'routing',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        lib          = ['ev', 'website', 'crypto'],
+        linkflags    = ['-g', 'libwebsite.a'],
+        lib          = ['ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -77,7 +82,8 @@ def build_tests(bld):
         target       = 'websocket',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        lib          = ['ev', 'website', 'crypto'],
+        linkflags    = ['-g', 'libwebsite.a'],
+        lib          = ['ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -87,7 +93,8 @@ def build_tests(bld):
         target       = 'runtests',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        lib          = ['ev', 'cunit', 'website'],
+        linkflags    = ['-g', 'libwebsite.a'],
+        lib          = ['ev', 'cunit'],
         )
     bld.add_group()
     bld(rule='./runtests', always=True)
@@ -97,29 +104,29 @@ def build_tests(bld):
         ' python ${SRC[0].abspath()} -v',
         source=['test/httptest.py', 'simple', 'websocket'],
         always=True)
-    
+
 class test(BuildContext):
     cmd = 'test'
     fun = 'build_tests'
     variant = 'test'
-    
-    
+
+
 def dist(ctx):
     ctx.excl = ['.waf*', '*.tar.bz2', '*.zip', 'build',
         '.git*', '.lock*', '**/*.pyc']
     ctx.algo = 'tar.bz2'
-    
+
 def make_pkgbuild(task):
     import hashlib
     task.outputs[0].write(Utils.subst_vars(task.inputs[0].read(), {
         'VERSION': VERSION,
         'DIST_MD5': hashlib.md5(task.inputs[1].read('rb')).hexdigest(),
         }))
-        
+
 def archpkg(ctx):
     from waflib import Options
     Options.commands = ['dist', 'makepkg'] + Options.commands
-        
+
 def build_package(bld):
     distfile = APPNAME + '-' + VERSION + '.tar.bz2'
     bld(rule=make_pkgbuild,
@@ -130,7 +137,7 @@ def build_package(bld):
     bld(rule='makepkg -f', source=distfile)
     bld.add_group()
     bld(rule='makepkg -f --source', source=distfile)
-    
+
 class makepkg(BuildContext):
     cmd = 'makepkg'
     fun = 'build_package'
