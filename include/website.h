@@ -3,6 +3,7 @@
 
 #include <ev.h>
 #include <obstack.h>
+#include <sys/queue.h>
 #include <netinet/in.h>
 
 typedef int bool;
@@ -112,8 +113,7 @@ typedef struct ws_hparser_s {
 typedef struct ws_request_s {
     struct obstack pieces;
     struct ws_connection_s *conn;
-    struct ws_request_s *next;
-    struct ws_request_s *prev;
+    TAILQ_ENTRY(ws_request_s) lst;
 
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
@@ -153,13 +153,10 @@ typedef struct ws_connection_s {
     int max_message_size;
     int max_message_queue;
     struct ws_server_s *serv;
-    struct ws_connection_s *next;
-    struct ws_connection_s *prev;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
-    struct ws_request_s *first_req;
-    struct ws_request_s *last_req;
+    TAILQ_HEAD(ws_req_list_s, ws_request_s) requests;
     size_t request_num;
     int close_on_finish;
     char *websocket_buf;
@@ -183,8 +180,6 @@ typedef struct ws_server_s {
     int max_message_queue;
     struct ws_listener_s *listeners;
     size_t listeners_num;
-    struct ws_connection_s *first_conn;
-    struct ws_connection_s *last_conn;
     size_t connection_num;
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
