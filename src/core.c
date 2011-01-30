@@ -591,6 +591,7 @@ static int ws_head_slice(ws_request_t *req, int size) {
     if(req->bodylen <= req->bufposition - reallen) {
         if(req->bodylen) {
             req->body = req->headers_buf + reallen;
+            req->bodyposition = req->bodylen;
         }
         req->reply_state = WS_R_EMPTY;
 
