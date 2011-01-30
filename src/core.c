@@ -895,7 +895,7 @@ static void ws_send_reply(struct ev_loop *loop,
 }
 
 static int ws_start_reply(ws_request_t *req) {
-    if(req->reply_state < WS_R_BODY) {
+    if(req->reply_state < WS_R_DONE) {
         errno = EAGAIN;
         return -1;
     }
@@ -983,7 +983,7 @@ int ws_finish_headers(ws_request_t *req) {
     obstack_grow(&req->pieces, "\r\n", 2);
     req->reply_head_size = obstack_object_size(&req->pieces);
     req->reply_head = obstack_finish(&req->pieces);
-    req->reply_state = WS_R_HEADERS;
+    req->reply_state = WS_R_BODY;
 }
 
 int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
@@ -991,11 +991,11 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state >= WS_R_BODY) {
+    if(req->reply_state > WS_R_BODY) {
         errno = EALREADY;
         return -1;
     }
-    if(req->reply_state < WS_R_HEADERS) {
+    if(req->reply_state <= WS_R_HEADERS) {
         if(ws_finish_headers(req) < 0) {
             return -1;
         }
@@ -1007,7 +1007,7 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
         assert(lenlen == 12);
         *(req->reply_head + req->_contlen_offset+12) = '\r';
     }
-    req->reply_state = WS_R_BODY;
+    req->reply_state = WS_R_DONE;
     if(TAILQ_FIRST(&req->conn->requests) == req) {
         ws_start_reply(req);
     }

@@ -10,6 +10,7 @@ typedef enum {
     WS_R_STATUS, // has buffer on top of obstack
     WS_R_HEADERS,
     WS_R_BODY,
+    WS_R_DONE,
     WS_R_SENDING,
     WS_R_SENT, // no more buffer on top of obstack
 } ws_reply_state;
