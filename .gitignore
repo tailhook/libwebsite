@@ -1,3 +1,4 @@
 .waf*
-.lock-wscript
+.lock-*
 /build
+/libwebsite*.tar.bz2
