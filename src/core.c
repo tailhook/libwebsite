@@ -716,14 +716,15 @@ static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
             switch(fd) {
             case EAGAIN: case ENETDOWN: case EPROTO: case ENOPROTOOPT:
             case EHOSTDOWN: case ENONET: case EHOSTUNREACH: case EOPNOTSUPP:
-            case ENETUNREACH:
+            case ENETUNREACH: case ECONNABORTED:
                 break;
             default:
                 perror("Socket error");
                 abort();
             }
+        } else {
+            ws_connection_init(fd, l->serv, &addr);
         }
-        ws_connection_init(fd, l->serv, &addr);
     }
     assert(!(revents & EV_ERROR));
 }
