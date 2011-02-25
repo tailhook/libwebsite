@@ -4,7 +4,7 @@ from waflib.Build import BuildContext
 from waflib import Utils, Options
 
 APPNAME='libwebsite'
-VERSION='0.2.8'
+VERSION='0.2.9'
 
 top = '.'
 out = 'build'
