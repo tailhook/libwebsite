@@ -923,6 +923,10 @@ void ws_quickstart(ws_server_t *serv, const char *host,
 }
 
 int ws_statusline(ws_request_t *req, const char *line) {
+    return ws_statusline_len(req, line, strlen(line));
+}
+
+int ws_statusline_len(ws_request_t *req, const char *line, int len) {
     if(req->reply_state <= WS_R_UNDEFINED) {
         errno = EAGAIN;
         return -1;
@@ -933,7 +937,7 @@ int ws_statusline(ws_request_t *req, const char *line) {
     }
     obstack_blank(&req->pieces, 0);
     obstack_grow(&req->pieces, "HTTP/1.1 ", 9);
-    obstack_grow(&req->pieces, line, strlen(line));
+    obstack_grow(&req->pieces, line, len);
     obstack_grow(&req->pieces, "\r\n", 2);
     req->reply_state = WS_R_STATUS;
     if(!req->websocket) {
