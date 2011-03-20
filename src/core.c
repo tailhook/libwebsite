@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <ctype.h>
 
@@ -121,6 +122,8 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
     }
     if(conn->request_num) {
         if(eat_last) {
+	    // TODO: Calling request finish is wrong when we got -1
+            // from request handler
             ws_request_finish(TAILQ_LAST(&conn->requests, ws_req_list_s));
             if(TAILQ_LAST(&conn->requests, ws_req_list_s)) {
                 conn->close_on_finish = TRUE;
@@ -723,6 +726,9 @@ static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
                 abort();
             }
         } else {
+	    int opt = 1;
+	    // let's set NODELAY to work faster, but don't car if doesn't work
+	    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
             ws_connection_init(fd, l->serv, &addr);
         }
     }
