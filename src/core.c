@@ -957,6 +957,7 @@ int ws_statusline_len(ws_request_t *req, const char *line, int len) {
             ws_add_header(req, "Connection", "Keep-Alive");
         }
     }
+    return 0;
 }
 
 int ws_add_header(ws_request_t *req, const char *name, const char *value) {
@@ -977,6 +978,7 @@ int ws_add_header(ws_request_t *req, const char *name, const char *value) {
     obstack_grow(&req->pieces, ": ", 2);
     obstack_grow(&req->pieces, value, strlen(value));
     obstack_grow(&req->pieces, "\r\n", 2);
+    return 0;
 }
 
 int ws_finish_headers(ws_request_t *req) {
@@ -997,6 +999,7 @@ int ws_finish_headers(ws_request_t *req) {
     req->reply_head_size = obstack_object_size(&req->pieces);
     req->reply_head = obstack_finish(&req->pieces);
     req->reply_state = WS_R_BODY;
+    return 0;
 }
 
 int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
