@@ -122,7 +122,7 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
     }
     if(conn->request_num) {
         if(eat_last) {
-	    // TODO: Calling request finish is wrong when we got -1
+            // TODO: Calling request finish is wrong when we got -1
             // from request handler
             ws_request_finish(TAILQ_LAST(&conn->requests, ws_req_list_s));
             if(TAILQ_LAST(&conn->requests, ws_req_list_s)) {

@@ -10,6 +10,9 @@
 #include <ev.h>
 #include <website.h>
 
+#define TRUE 1
+#define FALSE 0
+
 char firstpage[] = "<!DOCTYPE html>\n"
     "<html>\n"
     "  <head><title>First Page</title></head>\n"

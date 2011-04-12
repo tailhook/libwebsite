@@ -6,6 +6,9 @@
 
 #include "search.h"
 
+#define TRUE 1
+#define FALSE 0
+
 #define obstack_chunk_alloc malloc
 #define obstack_chunk_free free
 
@@ -139,7 +142,7 @@ int ws_match_compile(void *rbox) {
     box->hashed = obstack_finish(&box->pieces);
 }
 
-bool ws_match(void *rbox, const char *value, size_t *result) {
+int ws_match(void *rbox, const char *value, size_t *result) {
     ws_match_box_t *box = (ws_match_box_t*)rbox;
     size_t hash = ws_match_hash(value);
     ws_match_item_t *item = box->hashed[hash % box->hash_size];
@@ -152,7 +155,7 @@ bool ws_match(void *rbox, const char *value, size_t *result) {
     return TRUE;
 }
 
-bool ws_imatch(void *rbox, const char *value, size_t *result) {
+int ws_imatch(void *rbox, const char *value, size_t *result) {
     ws_match_box_t *box = (ws_match_box_t*)rbox;
     size_t hash = ws_match_ihash(value);
     ws_match_item_t *item = box->hashed[hash % box->hash_size];
@@ -183,7 +186,7 @@ void ws_fuzzy_free(void *hint) {
     free(box);
 }
 
-size_t ws_fuzzy_add(void *rbox, const char *value, bool prefix, size_t result) {
+size_t ws_fuzzy_add(void *rbox, const char *value, int prefix, size_t result) {
     ws_fuzzy_box_t *box = (ws_fuzzy_box_t*)rbox;
     assert(!box->hash_size);
     ws_fuzzy_item_t *t = box->first;
@@ -324,7 +327,7 @@ int ws_fuzzy_compile(void *rbox) {
     box->nsizes = size_cnt;
 }
 
-bool ws_fuzzy(void *rbox, const char *value, size_t *result) {
+int ws_fuzzy(void *rbox, const char *value, size_t *result) {
     ws_fuzzy_box_t *box = rbox;
     assert(box->nsizes);
     size_t hashes[box->nsizes];
@@ -380,7 +383,7 @@ bool ws_fuzzy(void *rbox, const char *value, size_t *result) {
     return FALSE;
 }
 
-bool ws_rfuzzy(void *rbox, const char *value, size_t *result) {
+int ws_rfuzzy(void *rbox, const char *value, size_t *result) {
     ws_fuzzy_box_t *box = rbox;
     assert(box->nsizes);
     size_t hashes[box->nsizes];

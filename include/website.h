@@ -6,10 +6,6 @@
 #include <sys/queue.h>
 #include <netinet/in.h>
 
-typedef int bool;
-#define TRUE 1
-#define FALSE 0
-
 #define ws_CONNECTION_STRUCT(targ, typ) (targ)->_conn_size = sizeof(typ)
 #define ws_REQUEST_STRUCT(targ, typ) (targ)->_req_size = sizeof(typ)
 #define ws_MESSAGE_STRUCT(targ, typ) (targ)->_message_size = sizeof(typ)
@@ -41,6 +37,8 @@ typedef int bool;
 #define ws_MESSAGE_INCREF(val) (++(val)->refcnt)
 #define ws_MESSAGE_DECREF(val) if(!--(val)->refcnt) ws_message_free(val)
 #endif
+
+typedef int ws_bool_t;
 
 typedef enum {
     WS_REQ_CB_HEADERS, // got headers
@@ -138,7 +136,7 @@ typedef struct ws_request_s {
     char *reply_body;
     int reply_body_size;
 
-    bool websocket;
+    ws_bool_t websocket;
 } ws_request_t;
 
 typedef struct ws_connection_s {
@@ -217,18 +215,18 @@ void ws_match_free(void *hint);
 size_t ws_match_add(void *box, const char *string, size_t result);
 size_t ws_match_iadd(void *box, const char *string, size_t result);
 int ws_match_compile(void *box);
-bool ws_match(void *box, const char *string, size_t *result);
-bool ws_imatch(void *box, const char *string, size_t *result);
+ws_bool_t ws_match(void *box, const char *string, size_t *result);
+ws_bool_t ws_imatch(void *box, const char *string, size_t *result);
 
 void *ws_fuzzy_new();
 void ws_fuzzy_free(void *hint);
-size_t ws_fuzzy_add(void *box, const char *string, bool prefix, size_t result);
-size_t ws_fuzzy_iadd(void *box, const char *string, bool prefix, size_t result);
+size_t ws_fuzzy_add(void *box, const char *string, ws_bool_t prefix, size_t result);
+size_t ws_fuzzy_iadd(void *box, const char *string, ws_bool_t prefix, size_t result);
 int ws_fuzzy_compile(void *box);
 int ws_rfuzzy_compile(void *box);
-bool ws_fuzzy(void *box, const char *string, size_t *result);
-bool ws_rfuzzy(void *box, const char *string, size_t *result);
-bool ws_ifuzzy(void *box, const char *string, size_t *result);
-bool ws_irfuzzy(void *box, const char *string, size_t *result);
+ws_bool_t ws_fuzzy(void *box, const char *string, size_t *result);
+ws_bool_t ws_rfuzzy(void *box, const char *string, size_t *result);
+ws_bool_t ws_ifuzzy(void *box, const char *string, size_t *result);
+ws_bool_t ws_irfuzzy(void *box, const char *string, size_t *result);
 
 #endif // WS_WEBSITE_H

@@ -2,6 +2,9 @@
 #include <CUnit/Basic.h>
 #include <website.h>
 
+#define TRUE 1
+#define FALSE 0
+
 void testMatch() {
     void *m = ws_match_new();
     CU_ASSERT_EQUAL(ws_match_add(m, "One", 1), 1);
