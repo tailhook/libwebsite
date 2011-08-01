@@ -345,14 +345,16 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
         int iovcnt = 3;
         if(conn->websocket_queue_offset) {
             riov += 1;
+            iovcnt -= 1;
             if(conn->websocket_queue_offset >= msg->length+1) {
                 riov += 1;
+                iovcnt -= 1;
             } else {
                 iov[1].iov_base += conn->websocket_queue_offset-1;
                 iov[1].iov_len -= conn->websocket_queue_offset-1;
             }
         }
-        int res = writev(watch->fd, iov, iovcnt);
+        int res = writev(watch->fd, riov, iovcnt);
         if(res <= 0) {
             switch(errno) {
                 case EAGAIN:
