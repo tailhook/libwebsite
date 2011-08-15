@@ -2,13 +2,13 @@
 
 pkgname=libwebsite
 pkgver=${VERSION}
-pkgrel=1
+pkgrel=2
 pkgdesc="An http/websocket protocol implementation for fast web servers"
 arch=('i686' 'x86_64')
 url="http://github.com/tailhook/libwebsite"
 license=('MIT')
 depends=('libev' 'openssl')
-makedepends=('python3')
+makedepends=('python3' 'cunit')
 source=(https://github.com/downloads/tailhook/libwebsite/$pkgname-$pkgver.tar.bz2)
 md5sums=('${DIST_MD5}')
 
