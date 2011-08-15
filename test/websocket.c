@@ -30,7 +30,6 @@ int websocket(ws_request_t *req) {
 }
 
 int message(ws_connection_t *conn, ws_message_t *msg) {
-    printf("MESSAGE [%d] ``%s''\n", msg->length, msg->data);
     ws_message_send(conn, msg);
     return 0;
 }

@@ -4,6 +4,9 @@ import os.path
 import unittest
 import socket
 import time
+import errno
+
+from itertools import count
 
 bin = os.environ.get('SIMPLE_BIN',
     os.path.join('.', 'build', 'test', 'simple'))
@@ -204,6 +207,20 @@ class WebSocket(unittest.TestCase):
         time.sleep(0.1) # sorry, will fix that tomorrow :)
         resp = sock.recv(4096)
         self.assertEquals(resp, b'\x00hello\xff\x00world\xff')
+
+    def testBadClose(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(websock_request)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_response)
+        sock.setblocking(False)
+        val = sock.send(b'\x00hello\xff'*1000000)
+        self.assertTrue(val < 7*100000)
+        val = sock.send(b'\x00hello\xff'*1000000)
+        self.assertTrue(val < 7*100000)
+        sock.close()
+        self.testEcho()
 
     def testParts(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

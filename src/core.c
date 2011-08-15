@@ -93,8 +93,11 @@ static void ws_connection_close(ws_connection_t *conn) {
         nxt = TAILQ_NEXT(cur, lst);
         ws_request_finish(cur);
     };
-    if(&conn->watch.active) {
+    if(conn->watch.active) {
         ev_io_stop(conn->loop, &conn->watch);
+    }
+    if(conn->reply_watch.active) {
+        ev_io_stop(conn->loop, &conn->reply_watch);
     }
     close(conn->watch.fd);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_DISCONNECT];
