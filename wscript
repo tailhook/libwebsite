@@ -3,8 +3,14 @@
 from waflib.Build import BuildContext
 from waflib import Utils, Options
 
+import os.path
+import subprocess
+
 APPNAME='libwebsite'
-VERSION='0.2.11'
+if os.path.exists('.git'):
+    VERSION=subprocess.getoutput('git describe').lstrip('v').replace('-', '_')
+else:
+    VERSION='0.2.12'
 
 top = '.'
 out = 'build'
