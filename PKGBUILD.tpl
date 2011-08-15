@@ -6,7 +6,7 @@ pkgrel=1
 pkgdesc="An http/websocket protocol implementation for fast web servers"
 arch=('i686' 'x86_64')
 url="http://github.com/tailhook/libwebsite"
-license=('GPL')
+license=('MIT')
 depends=('libev' 'openssl')
 makedepends=('python3')
 source=(https://github.com/downloads/tailhook/libwebsite/$pkgname-$pkgver.tar.bz2)
@@ -26,4 +26,5 @@ check() {
 package() {
   cd $srcdir/$pkgname-$pkgver
   ./waf install --destdir=$pkgdir
+  install -D -m644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
