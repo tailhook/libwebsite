@@ -16,5 +16,14 @@ build() {
   cd $srcdir/$pkgname-$pkgver
   ./waf configure --prefix=/usr
   ./waf build
+}
+
+check() {
+  cd $srcdir/$pkgname-$pkgver
+  ./waf test
+}
+
+package() {
+  cd $srcdir/$pkgname-$pkgver
   ./waf install --destdir=$pkgdir
 }
