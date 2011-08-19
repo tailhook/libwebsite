@@ -29,7 +29,19 @@ int websocket(ws_request_t *req) {
     return 0;
 }
 
+void close_conn(struct ev_loop *loop, struct ev_idle *watch, int revents) {
+    ws_connection_close((ws_connection_t *)watch->data);
+    free(watch);
+}
+
 int message(ws_connection_t *conn, ws_message_t *msg) {
+    if(!strncmp(msg->data, "bye", 3)) {
+        struct ev_idle *val = malloc(sizeof(struct ev_idle));
+        ev_idle_init(val, close_conn);
+        val->data = conn;
+        ev_idle_start(conn->serv->loop, val);
+        return 0;
+    }
     ws_message_send(conn, msg);
     return 0;
 }

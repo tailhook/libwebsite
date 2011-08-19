@@ -240,5 +240,21 @@ class WebSocket(unittest.TestCase):
         resp = sock.recv(4096)
         self.assertEquals(resp, b'\x00world\xff')
 
+    def testForceDisconnect(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(websock_request)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_response)
+        sock.send(b'\x00hello\xff')
+        time.sleep(0.01)
+        sock.send(b'\x00bye\xff')
+        time.sleep(0.01)
+        sock.send(b'\x00hello\xff')
+        resp = sock.recv(4096)
+        self.assertEquals(resp, b'\x00hello\xff')
+        resp = sock.recv(4096)  #ensure connection is closed
+        self.assertEquals(resp, b'')
+
 if __name__ == '__main__':
     unittest.main()

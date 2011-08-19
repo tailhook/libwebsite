@@ -87,7 +87,7 @@ static void ws_request_finish(ws_request_t *req) {
     }
 }
 
-static void ws_connection_close(ws_connection_t *conn) {
+void ws_connection_close(ws_connection_t *conn) {
     ws_request_t *cur, *nxt;
     for(cur = TAILQ_FIRST(&conn->requests); cur; cur = nxt) {
         nxt = TAILQ_NEXT(cur, lst);

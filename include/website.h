@@ -199,6 +199,7 @@ int ws_add_unix(ws_server_t *serv, const char *filename, size_t len);
 int ws_add_fd(ws_server_t *serv, int fd);
 int ws_index_header(ws_server_t *serv, const char *name);
 int ws_server_start(ws_server_t *serv);
+void ws_connection_close(ws_connection_t *conn);
 
 ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     void *data, size_t len);
