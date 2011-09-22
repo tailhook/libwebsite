@@ -10,6 +10,8 @@ from itertools import count
 
 bin = os.environ.get('SIMPLE_BIN',
     os.path.join('.', 'build', 'test', 'simple'))
+detbin = os.environ.get('DETAILED_BIN',
+    os.path.join('.', 'build', 'test', 'detailed'))
 websockbin = os.environ.get('WEBSOCK_BIN',
     os.path.join('.', 'build', 'test', 'websocket'))
 
@@ -36,6 +38,35 @@ sample_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
     b'</html>\n\x00')
+
+detailed_output1 = (b'HTTP/1.1 200 OK\r\n'
+    b'Content-Length:          129\r\n'
+    b'Connection: close\r\n'
+    b'X-Request-ID: 0\r\n'
+    b'X-Connection-ID: 0\r\n'
+    b'Content-Type: text/html\r\n'
+    b'\r\n'
+    b'<!DOCTYPE html>\n'
+    b'<html>\n'
+    b'  <head><title>Hello from sample</title></head>\n'
+    b'  <body>\n'
+    b'    <h1>Hello from sample</h1>\n'
+    b'  </body>\n'
+    b'</html>\n')
+detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
+    b'Content-Length:          129\r\n'
+    b'Connection: close\r\n'
+    b'X-Request-ID: 0\r\n'
+    b'X-Connection-ID: 1\r\n'
+    b'Content-Type: text/html\r\n'
+    b'\r\n'
+    b'<!DOCTYPE html>\n'
+    b'<html>\n'
+    b'  <head><title>Hello from sample</title></head>\n'
+    b'  <body>\n'
+    b'    <h1>Hello from sample</h1>\n'
+    b'  </body>\n'
+    b'</html>\n')
 
 websock_request = (b'GET /echo HTTP/1.1\r\n'
     b'Host: localhost:8080\r\n'
@@ -84,7 +115,15 @@ class HTTP(unittest.TestCase):
         sock.connect(('localhost', 8080))
         sock.send(b"GET / HTTP/1.1\r\n\r\n")
         resp = sock.recv(4096)
-        self.assertEquals(resp, b"") # host is required
+        self.assertEquals(resp, b"")  # host is required
+
+    def testNotEndedHeader(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"DROPME / HTTP/1.1\r\nUpgrade: Something\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEquals(resp, b"")  # host is required
+        self.testHTTP10()  # still not crashed
 
     def testAlive(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -255,6 +294,37 @@ class WebSocket(unittest.TestCase):
         self.assertEquals(resp, b'\x00hello\xff')
         resp = sock.recv(4096)  #ensure connection is closed
         self.assertEquals(resp, b'')
+
+class DetailedHttp(unittest.TestCase):
+
+    def setUp(self):
+        self.proc = subprocess.Popen(detbin)
+        time.sleep(0.1)
+
+    def tearDown(self):
+        self.proc.terminate()
+        self.proc.wait()
+        time.sleep(0.1)
+
+    def testHTTP10(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEquals(resp, detailed_output1)
+
+    def testNotEndedHeader(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"DROPME / HTTP/1.1\r\nUpgrade: Something\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEqual(resp, b"")  # host is required
+        # still not crashed
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEquals(resp, detailed_output2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -116,6 +116,7 @@ typedef struct ws_request_s {
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
     ev_tstamp network_timeout;
+    int request_state;
     char *headers_buf;
     int bufposition;
     int headerlen;
@@ -129,7 +130,6 @@ typedef struct ws_request_s {
 
     char **headerindex;
     int reply_pos;
-    int reply_state;
     char *reply_head;
     int reply_head_size;
     int _contlen_offset;

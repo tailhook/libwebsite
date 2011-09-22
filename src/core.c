@@ -42,7 +42,7 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->body = 0;
     req->bodylen = 0;
     req->bodyposition = 0;
-    req->reply_state = 0;
+    req->request_state = WS_R_RECVHEADERS;
     req->reply_head = NULL;
     req->reply_head_size = 0;
     req->reply_body = NULL;
@@ -76,7 +76,7 @@ static void ws_request_finish(ws_request_t *req) {
         ev_io_stop(req->conn->loop, &req->conn->reply_watch);
     }
     bool need_free = TRUE;
-    if(req->headerlen) {
+    if(req->request_state >= WS_R_RECVBODY) {
         ws_request_cb cb = req->req_callbacks[WS_REQ_CB_FINISH];
         if(cb) {
             need_free = cb(req) <= 0;
@@ -125,8 +125,6 @@ static void ws_graceful_finish(ws_connection_t *conn, bool eat_last) {
     }
     if(conn->request_num) {
         if(eat_last) {
-            // TODO: Calling request finish is wrong when we got -1
-            // from request handler
             ws_request_finish(TAILQ_LAST(&conn->requests, ws_req_list_s));
             if(TAILQ_LAST(&conn->requests, ws_req_list_s)) {
                 conn->close_on_finish = TRUE;
@@ -452,7 +450,7 @@ static int ws_enable_websocket(ws_request_t *req) {
 static int ws_body_slice(ws_request_t *req, int size) {
     req->bodyposition += size;
     if(req->bodyposition >= req->bodylen) {
-        req->reply_state = WS_R_EMPTY;
+        req->request_state = WS_R_EMPTY;
 
         char *item = req->headerindex[WS_H_CONNECTION];
         if(req->http_version == WS_HTTP_10) {
@@ -596,12 +594,13 @@ static int ws_head_slice(ws_request_t *req, int size) {
             }
         }
     }
+    req->request_state = WS_R_RECVBODY;
     if(req->bodylen <= req->bufposition - reallen) {
         if(req->bodylen) {
             req->body = req->headers_buf + reallen;
             req->bodyposition = req->bodylen;
         }
-        req->reply_state = WS_R_EMPTY;
+        req->request_state = WS_R_EMPTY;
 
         item = req->headerindex[WS_H_CONNECTION];
         if(req->http_version == WS_HTTP_10) {
@@ -888,7 +887,7 @@ static void ws_send_reply(struct ev_loop *loop,
         }
         req->reply_pos += res;
         if(req->reply_pos >= req->reply_head_size + req->reply_body_size) {
-            req->reply_state = WS_R_SENT;
+            req->request_state = WS_R_SENT;
             ev_io_stop(loop, watch);
 
             ws_connection_t *conn = req->conn;
@@ -909,15 +908,15 @@ static void ws_send_reply(struct ev_loop *loop,
 }
 
 static int ws_start_reply(ws_request_t *req) {
-    if(req->reply_state < WS_R_DONE) {
+    if(req->request_state < WS_R_DONE) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state >= WS_R_SENDING) {
+    if(req->request_state >= WS_R_SENDING) {
         errno = EALREADY;
         return -1;
     }
-    req->reply_state = WS_R_SENDING;
+    req->request_state = WS_R_SENDING;
     ev_io_start(req->conn->loop, &req->conn->reply_watch);
     return 0;
 }
@@ -939,11 +938,11 @@ int ws_statusline(ws_request_t *req, const char *line) {
 }
 
 int ws_statusline_len(ws_request_t *req, const char *line, int len) {
-    if(req->reply_state <= WS_R_UNDEFINED) {
+    if(req->request_state < WS_R_EMPTY) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state >= WS_R_STATUS){
+    if(req->request_state >= WS_R_STATUS){
         errno = EALREADY;
         return -1;
     }
@@ -951,7 +950,7 @@ int ws_statusline_len(ws_request_t *req, const char *line, int len) {
     obstack_grow(&req->pieces, "HTTP/1.1 ", 9);
     obstack_grow(&req->pieces, line, len);
     obstack_grow(&req->pieces, "\r\n", 2);
-    req->reply_state = WS_R_STATUS;
+    req->request_state = WS_R_STATUS;
     if(!req->websocket) {
         ws_add_header(req, "Content-Length", "           0");
         req->_contlen_offset = obstack_object_size(&req->pieces)-14;
@@ -966,15 +965,15 @@ int ws_statusline_len(ws_request_t *req, const char *line, int len) {
 }
 
 int ws_add_header(ws_request_t *req, const char *name, const char *value) {
-    if(req->reply_state <= WS_R_UNDEFINED) {
+    if(req->request_state < WS_R_EMPTY) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state >= WS_R_HEADERS) {
+    if(req->request_state >= WS_R_HEADERS) {
         errno = EALREADY;
         return -1;
     }
-    if(req->reply_state < WS_R_STATUS) {
+    if(req->request_state < WS_R_STATUS) {
         if(ws_statusline(req, "200 OK") < 0) {
             return -1;
         }
@@ -987,15 +986,15 @@ int ws_add_header(ws_request_t *req, const char *name, const char *value) {
 }
 
 int ws_finish_headers(ws_request_t *req) {
-    if(req->reply_state <= WS_R_UNDEFINED) {
+    if(req->request_state < WS_R_EMPTY) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state >= WS_R_HEADERS) {
+    if(req->request_state >= WS_R_HEADERS) {
         errno = EALREADY;
         return -1;
     }
-    if(req->reply_state < WS_R_STATUS) {
+    if(req->request_state < WS_R_STATUS) {
         if(ws_statusline(req, "200 OK") < 0) {
             return -1;
         }
@@ -1003,20 +1002,20 @@ int ws_finish_headers(ws_request_t *req) {
     obstack_grow(&req->pieces, "\r\n", 2);
     req->reply_head_size = obstack_object_size(&req->pieces);
     req->reply_head = obstack_finish(&req->pieces);
-    req->reply_state = WS_R_BODY;
+    req->request_state = WS_R_BODY;
     return 0;
 }
 
 int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
-    if(req->reply_state <= WS_R_UNDEFINED) {
+    if(req->request_state < WS_R_EMPTY) {
         errno = EAGAIN;
         return -1;
     }
-    if(req->reply_state > WS_R_BODY) {
+    if(req->request_state > WS_R_BODY) {
         errno = EALREADY;
         return -1;
     }
-    if(req->reply_state <= WS_R_HEADERS) {
+    if(req->request_state <= WS_R_HEADERS) {
         if(ws_finish_headers(req) < 0) {
             return -1;
         }
@@ -1028,7 +1027,7 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
         assert(lenlen == 12);
         *(req->reply_head + req->_contlen_offset+12) = '\r';
     }
-    req->reply_state = WS_R_DONE;
+    req->request_state = WS_R_DONE;
     if(TAILQ_FIRST(&req->conn->requests) == req) {
         ws_start_reply(req);
     }

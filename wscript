@@ -106,9 +106,11 @@ def build_tests(bld):
     bld(rule='./runtests', always=True)
     bld.add_group()
     bld(rule='cd ${SRC[0].parent.abspath()};'
-        'SIMPLE_BIN=${SRC[1].abspath()} WEBSOCK_BIN=${SRC[2].abspath()}'
+        ' SIMPLE_BIN=${SRC[1].abspath()}'
+        ' WEBSOCK_BIN=${SRC[2].abspath()}'
+        ' DETAILED_BIN=${SRC[3].abspath()}'
         ' python ${SRC[0].abspath()} -v',
-        source=['test/httptest.py', 'simple', 'websocket'],
+        source=['test/httptest.py', 'simple', 'websocket', 'detailed'],
         always=True)
 
 class test(BuildContext):

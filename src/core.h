@@ -5,7 +5,9 @@
 #include <website.h>
 
 typedef enum {
-    WS_R_UNDEFINED,
+    WS_R_NEW,
+    WS_R_RECVHEADERS,
+    WS_R_RECVBODY,
     WS_R_EMPTY,
     WS_R_STATUS, // has buffer on top of obstack
     WS_R_HEADERS,
@@ -13,6 +15,7 @@ typedef enum {
     WS_R_DONE,
     WS_R_SENDING,
     WS_R_SENT, // no more buffer on top of obstack
+    WS_R_WEBSOCK = 100,
 } ws_reply_state;
 
 typedef struct ws_listener_s {

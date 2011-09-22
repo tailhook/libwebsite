@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #include <ev.h>
 #include <website.h>
@@ -36,6 +37,7 @@ typedef struct myconnection_s {
 typedef struct myrequest_s {
     ws_request_t native;
     int id;
+    long check;
 } myrequest_t;
 
 int incr_connections(myconnection_t *conn) {
@@ -50,12 +52,22 @@ int decr_connections(myconnection_t *conn) {
 }
 
 int incr_requests(myrequest_t *req) {
+    if(!strcmp(req->native.method, "DROPME")) {
+        req->id = -1;
+        req->check = -1;
+        // Let's check if finish not called
+        return -1;
+    }
     printf("incr_requests\n");
     req->id = requests++;
+    req->check = (long)req + req->id;
     ++current_requests;
 }
 
 int decr_requests(myrequest_t *req) {
+    assert(req->check == (long)req + req->id);
+    req->check = 1 << (sizeof(req->check) - 1);
+    req->id = -1;
     printf("decr_requests\n");
     --current_requests;
 }
@@ -97,6 +109,8 @@ int main(int argc, char **argv) {
     ws_HEADERS_CB(&server, incr_requests);
     ws_REQUEST_CB(&server, reply);
     ws_FINISH_CB(&server, decr_requests);
+    ws_WEBSOCKET_CB(&server, (void *)1);
+    ws_MESSAGE_CB(&server, (void *)1);
     host_header = ws_index_header(&server, "Host");
     realip_header = ws_index_header(&server, "X-Real-IP");
     ws_server_start(&server);
