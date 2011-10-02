@@ -2,7 +2,7 @@
 
 pkgname=libwebsite
 pkgver=${VERSION}
-pkgrel=2
+pkgrel=1
 pkgdesc="An http/websocket protocol implementation for fast web servers"
 arch=('i686' 'x86_64')
 url="http://github.com/tailhook/libwebsite"
