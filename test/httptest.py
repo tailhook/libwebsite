@@ -71,24 +71,25 @@ detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
 websock_request = (b'GET /echo HTTP/1.1\r\n'
     b'Host: localhost:8080\r\n'
     b'Connection: Upgrade\r\n'
-    b'Sec-WebSocket-Key2: 12998 5 Y3 1  .P00\r\n'
     b'Upgrade: WebSocket\r\n'
-    b'Sec-WebSocket-Key1: 4 @1  46546xW%0l 1 5\r\n'
+    b'Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n'
+    b'Sec-WebSocket-Version: 13\r\n'
     b'Origin: http://localhost\r\n'
-    b'\r\n'
-    b'^n:ds[4U')
+    b'\r\n')
 websock_response = (b'HTTP/1.1 101 WebSocket Protocol Handshake\r\n'
     b'Upgrade: WebSocket\r\n'
     b'Connection: Upgrade\r\n'
-    b'Sec-WebSocket-Location: ws://localhost:8080/echo\r\n'
-    b'Sec-WebSocket-Origin: http://localhost\r\n'
-    b'\r\n'
-    b'8jKS\'y:G*Co,Wxa-')
+    b'Sec-WebSocket-Accept: HSmrc0sMlYUkAGmm5OPpG2HaGWk=\r\n'
+    b'\r\n')
 
 class HTTP(unittest.TestCase):
 
     def setUp(self):
         self.proc = subprocess.Popen(bin)
+        if 'DEBUG' in os.environ:
+            print("No do:")
+            print("gdb", bin, self.proc.pid)
+            time.sleep(10)
         time.sleep(0.1)
 
     def tearDown(self):
@@ -219,6 +220,10 @@ class WebSocket(unittest.TestCase):
 
     def setUp(self):
         self.proc = subprocess.Popen(websockbin)
+        if 'DEBUG' in os.environ:
+            print("No do:")
+            print("gdb", websockbin, self.proc.pid)
+            time.sleep(10)
         time.sleep(0.1)
 
     def tearDown(self):

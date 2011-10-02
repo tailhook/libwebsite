@@ -66,8 +66,8 @@ typedef enum {
     WS_H_UPGRADE,
     WS_H_ORIGIN,
     WS_H_WEBSOCKET_PROTO,
-    WS_H_WEBSOCKET_KEY1,
-    WS_H_WEBSOCKET_KEY2,
+    WS_H_WEBSOCKET_KEY,
+    WS_H_WEBSOCKET_VERSION,
     WS_STD_HEADERS,
 } ws_header_enum;
 
