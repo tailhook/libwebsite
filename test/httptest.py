@@ -81,6 +81,12 @@ websock_response = (b'HTTP/1.1 101 WebSocket Protocol Handshake\r\n'
     b'Connection: Upgrade\r\n'
     b'Sec-WebSocket-Accept: HSmrc0sMlYUkAGmm5OPpG2HaGWk=\r\n'
     b'\r\n')
+websock_hello = b'\x81\x85\x00\x00\x00\x00hello'
+websock_hello_re = b'\x81\x05hello'
+websock_bye = b'\x81\x83\x00\x00\x00\x00bye'
+websock_bye_re = b'\x81\x03bye'
+websock_world = b'\x81\x85\x01\x02\x03\x04vmqhe'
+websock_world_re = b'\x81\x05world'
 
 class HTTP(unittest.TestCase):
 
@@ -244,13 +250,12 @@ class WebSocket(unittest.TestCase):
         sock.send(websock_request)
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_response)
-        sock.send(b'\x00hello\xff')
+        sock.send(websock_hello)
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00hello\xff')
-        sock.send(b'\x00hello\xff\x00world\xff')
-        time.sleep(0.1) # sorry, will fix that tomorrow :)
+        self.assertEquals(resp, websock_hello_re)
+        sock.sendall(websock_hello + websock_world)
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00hello\xff\x00world\xff')
+        self.assertEquals(resp, websock_hello_re + websock_world_re)
 
     def testBadClose(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -259,9 +264,9 @@ class WebSocket(unittest.TestCase):
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_response)
         sock.setblocking(False)
-        val = sock.send(b'\x00hello\xff'*1000000)
+        val = sock.send(websock_hello*1000000)
         self.assertTrue(val < 7*100000)
-        val = sock.send(b'\x00hello\xff'*1000000)
+        val = sock.send((websock_hello*1000000)[val:])
         self.assertTrue(val < 7*100000)
         sock.close()
         self.testEcho()
@@ -272,17 +277,17 @@ class WebSocket(unittest.TestCase):
         sock.send(websock_request)
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_response)
-        sock.send(b'\x00hell')
+        sock.send(websock_hello[:3])
         time.sleep(0.01)
-        sock.send(b'o\xff')
+        sock.send(websock_hello[3:])
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00hello\xff')
-        sock.send(b'\x00hello\xff\x00wor')
+        self.assertEquals(resp, websock_hello_re)
+        sock.send(websock_hello + websock_world[:8])
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00hello\xff')
-        sock.send(b'ld\xff')
+        self.assertEquals(resp, websock_hello_re)
+        sock.send(websock_world[8:])
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00world\xff')
+        self.assertEquals(resp, websock_world_re)
 
     def testForceDisconnect(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -290,13 +295,13 @@ class WebSocket(unittest.TestCase):
         sock.send(websock_request)
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_response)
-        sock.send(b'\x00hello\xff')
+        sock.send(websock_hello)
         time.sleep(0.01)
-        sock.send(b'\x00bye\xff')
+        sock.send(websock_bye)
         time.sleep(0.01)
-        sock.send(b'\x00hello\xff')
+        sock.send(websock_hello)
         resp = sock.recv(4096)
-        self.assertEquals(resp, b'\x00hello\xff')
+        self.assertEquals(resp, websock_hello_re)
         resp = sock.recv(4096)  #ensure connection is closed
         self.assertEquals(resp, b'')
 
