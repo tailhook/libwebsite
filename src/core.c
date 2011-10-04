@@ -259,6 +259,7 @@ ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     res->data = (char *)res + conn->_message_size;
     res->data[len] = 0; // for easier dealing with that as string
     res->length = len;
+    res->flags = WS_MSG_TEXT;
     res->free_cb = NULL;
     return res;
 }
@@ -270,6 +271,7 @@ ws_message_t *ws_message_new_size(ws_connection_t *conn, size_t len) {
     res->data = (char *)res + conn->_message_size;
     res->data[len] = 0; // for easier dealing with that as string
     res->length = len;
+    res->flags = WS_MSG_TEXT;
     res->free_cb = NULL;
     return res;
 }
@@ -428,29 +430,51 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 len -= 4;
                 // TODO(tailhook) check opcode
                 if(len >= msglen) {
+                    if(opcode == WS_MSG_CLOSE) {
+                        // TODO(tailhook) implement graceful close
+                        ws_connection_close(conn);
+                        return;
+                    }
                     ws_message_t *msg = ws_message_copy_data(
                         conn, start, msglen);
-                    if(opcode == 2) {
-                        msg->flags |= WS_MSG_BINARY;
-                    }
                     unmask(msg, mask);
-                    ws_websocket_cb cb = \
-                        conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
-                    int res = -1;
-                    if(cb) {
-                        res = cb(conn, msg);
-                    }
-                    ws_MESSAGE_DECREF(msg);
-                    if(res < 0) {
+                    switch(opcode) {
+                    case WS_MSG_BINARY:
+                        msg->flags = WS_MSG_BINARY;
+                    case WS_MSG_TEXT: {
+                        ws_websocket_cb cb = \
+                            conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
+                        int res = -1;
+                        if(cb) {
+                            res = cb(conn, msg);
+                        }
+                        ws_MESSAGE_DECREF(msg);
+                        if(res < 0) {
+                            ws_connection_close(conn);
+                            return;
+                        }
+                        } break;
+                    case WS_MSG_PING:
+                        msg->flags = WS_MSG_PONG;
+                        ws_message_send(conn, msg);
+                        ws_MESSAGE_DECREF(msg);
+                        break;
+                    case WS_MSG_PONG:
+                        // TODO(tailhook) check pong response
+                        ws_MESSAGE_DECREF(msg);
+                        break;
+                    default:
+                        ws_MESSAGE_DECREF(msg);
                         ws_connection_close(conn);
                         return;
                     }
                     start += msglen;
                     len -= msglen;
                 } else {
+                    if(opcode >= 8) break; // let's wait whole frame
                     ws_message_t *msg = ws_message_new_size(conn, msglen);
-                    if(opcode == 2) {
-                        msg->flags |= WS_MSG_BINARY;
+                    if(opcode == WS_MSG_BINARY) {
+                        msg->flags = WS_MSG_BINARY;
                     }
                     memcpy(msg->data, start, len);
                     conn->websocket_partial = msg;
@@ -481,7 +505,7 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
             char header[10];
             int headlen = 2;
             ws_message_t *msg = conn->websocket_queue[conn->websocket_qstart];
-            header[0] = msg->flags & WS_MSG_BINARY ? 0x82 : 0x81;
+            header[0] = 0x80 | (msg->flags & WS_MSG_TYPE);
             if(msg->length > 65535) {
                 header[1] = 127;
                 *(uint64_t*)(header+2) = htobe64(msg->length);

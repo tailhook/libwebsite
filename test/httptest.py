@@ -87,6 +87,8 @@ websock_bye = b'\x81\x83\x00\x00\x00\x00bye'
 websock_bye_re = b'\x81\x03bye'
 websock_world = b'\x81\x85\x01\x02\x03\x04vmqhe'
 websock_world_re = b'\x81\x05world'
+websock_ping = b'\x89\x84\x00\x00\x00\x00gnip'
+websock_ping_re = b'\x8A\x04gnip'
 
 class HTTP(unittest.TestCase):
 
@@ -256,6 +258,20 @@ class WebSocket(unittest.TestCase):
         sock.sendall(websock_hello + websock_world)
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_hello_re + websock_world_re)
+
+    def testPing(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(websock_request)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_response)
+        sock.send(websock_ping)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_ping_re)
+        sock.sendall(websock_hello + websock_ping + websock_world)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_hello_re
+            + websock_ping_re + websock_world_re)
 
     def testBadClose(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -84,8 +84,12 @@ typedef enum {
 } ws_reply_enum;
 
 typedef enum {
-    WS_MSG_TEXT = 0,
-    WS_MSG_BINARY = 1
+    WS_MSG_TEXT = 1,
+    WS_MSG_BINARY = 2,
+    WS_MSG_CLOSE = 8,
+    WS_MSG_PING = 9,
+    WS_MSG_PONG = 10,
+    WS_MSG_TYPE = 0xF
 } ws_message_flags;
 
 struct ws_request_s;
