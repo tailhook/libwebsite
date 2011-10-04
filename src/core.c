@@ -288,6 +288,7 @@ int ws_message_init(ws_message_t *res) {
     res->refcnt = 1;
     res->data = NULL;
     res->length = 0;
+    res->flags = WS_MSG_TEXT;
     res->free_cb = NULL;
     return 0;
 }
@@ -425,9 +426,13 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 char *mask = start;
                 start += 4;
                 len -= 4;
+                // TODO(tailhook) check opcode
                 if(len >= msglen) {
                     ws_message_t *msg = ws_message_copy_data(
                         conn, start, msglen);
+                    if(opcode == 2) {
+                        msg->flags |= WS_MSG_BINARY;
+                    }
                     unmask(msg, mask);
                     ws_websocket_cb cb = \
                         conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
@@ -444,6 +449,9 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     len -= msglen;
                 } else {
                     ws_message_t *msg = ws_message_new_size(conn, msglen);
+                    if(opcode == 2) {
+                        msg->flags |= WS_MSG_BINARY;
+                    }
                     memcpy(msg->data, start, len);
                     conn->websocket_partial = msg;
                     conn->websocket_partial_len = len;
@@ -473,7 +481,7 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
             char header[10];
             int headlen = 2;
             ws_message_t *msg = conn->websocket_queue[conn->websocket_qstart];
-            header[0] = 0x81; // text frames for now
+            header[0] = msg->flags & WS_MSG_BINARY ? 0x82 : 0x81;
             if(msg->length > 65535) {
                 header[1] = 127;
                 *(uint64_t*)(header+2) = htobe64(msg->length);

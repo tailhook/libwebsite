@@ -83,11 +83,17 @@ typedef enum {
     WS_REPLY_SENDFILE,
 } ws_reply_enum;
 
+typedef enum {
+    WS_MSG_TEXT = 0,
+    WS_MSG_BINARY = 1
+} ws_message_flags;
+
 struct ws_request_s;
 struct ws_connection_s;
 
 typedef struct ws_message_s {
     size_t refcnt;
+    int flags;
     size_t length;
     char *data;
     void (*free_cb)(void *);
