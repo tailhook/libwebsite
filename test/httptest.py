@@ -284,6 +284,7 @@ class WebSocket(unittest.TestCase):
         self.assertTrue(val < 7*100000)
         val = sock.send((websock_hello*1000000)[val:])
         self.assertTrue(val < 7*100000)
+        time.sleep(0.1)
         sock.close()
         self.testEcho()
 
