@@ -89,6 +89,9 @@ websock_world = b'\x81\x85\x01\x02\x03\x04vmqhe'
 websock_world_re = b'\x81\x05world'
 websock_ping = b'\x89\x84\x00\x00\x00\x00gnip'
 websock_ping_re = b'\x8A\x04gnip'
+websock_hello_p1 = b'\x01\x85\x00\x00\x00\x00hello'
+websock_hello_p2 = b'\x80\x85\x01\x02\x03\x04vmqhe'
+websock_hello_world = b'\x81\x0Ahelloworld'
 
 class HTTP(unittest.TestCase):
 
@@ -305,6 +308,18 @@ class WebSocket(unittest.TestCase):
         sock.send(websock_world[8:])
         resp = sock.recv(4096)
         self.assertEquals(resp, websock_world_re)
+
+    def testFrames(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(websock_request)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_response)
+        sock.send(websock_hello_p1)
+        time.sleep(0.01)
+        sock.send(websock_hello_p2)
+        resp = sock.recv(4096)
+        self.assertEquals(resp, websock_hello_world)
 
     def testForceDisconnect(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

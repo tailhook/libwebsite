@@ -168,12 +168,17 @@ typedef struct ws_connection_s {
     TAILQ_HEAD(ws_req_list_s, ws_request_s) requests;
     size_t request_num;
     int close_on_finish;
+
     char *websocket_buf;
     size_t websocket_buf_size;
     size_t websocket_buf_offset;
+
     ws_message_t *websocket_partial;
     size_t websocket_partial_len;
+    size_t websocket_partial_frame;
     char websocket_partial_mask[4];
+    int websocket_partial_fin;
+
     ws_message_t **websocket_queue;
     size_t websocket_queue_size;
     size_t websocket_qstart;
@@ -219,6 +224,7 @@ ws_message_t *ws_message_copy_data(ws_connection_t *conn,
     void *data, size_t len);
 ws_message_t *ws_message_new(ws_connection_t *conn);
 ws_message_t *ws_message_new_size(ws_connection_t *conn, size_t size);
+ws_message_t *ws_message_resize(ws_message_t *conn, size_t size);
 int ws_message_init(ws_message_t *msg);
 int ws_message_send(ws_connection_t *conn, ws_message_t *msg);
 void ws_message_free(ws_message_t *msg);

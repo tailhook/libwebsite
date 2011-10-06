@@ -276,6 +276,17 @@ ws_message_t *ws_message_new_size(ws_connection_t *conn, size_t len) {
     return res;
 }
 
+ws_message_t *ws_message_resize(ws_message_t *msg, size_t len) {
+    size_t msg_size = msg->data - (char *)msg;
+    ws_message_t *res = (ws_message_t *)realloc(msg, msg_size+len+1);
+    if(!res) return NULL;
+    res->data = (char *)res + msg_size;
+    res->data[len] = 0; // for easier dealing with that as string
+    res->length = len;
+    assert(res->free_cb == NULL);
+    return res;
+}
+
 ws_message_t *ws_message_new(ws_connection_t *conn) {
     ws_message_t *res = (ws_message_t *)malloc(conn->_message_size);
     if(!res) return NULL;
@@ -324,10 +335,10 @@ int ws_message_send(ws_connection_t *conn, ws_message_t *msg) {
     return 0;
 }
 
-static void unmask(ws_message_t *msg, char *mask) {
-    assert(((size_t)msg->data & 3) == 0);
-    for(char *c = msg->data, *e = msg->data + msg->length; c < e; ++ c) {
-        *c = *c ^ mask[(size_t)c & 3];
+static void unmask(ws_message_t *msg, char *mask, int offset) {
+    char *c = msg->data + offset, *e = msg->data + msg->length;
+    for(int i = 0; c < e; ++c, ++i) {
+        *c = *c ^ mask[(size_t)i & 3];
     }
 }
 
@@ -336,28 +347,31 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
     assert(!(revents & EV_ERROR));
     ws_connection_t *conn = (ws_connection_t *)((char *)watch
         - offsetof(ws_connection_t, watch));
-    if(revents & EV_READ) {
-        if(conn->websocket_partial) {
-            int r = read(conn->watch.fd,
-                conn->websocket_partial->data + conn->websocket_partial_len,
-                conn->websocket_partial->length - conn->websocket_partial_len);
-            if(r < 0) {
-                switch(errno) {
-                    case EAGAIN:
-                    case EINTR:
-                        return;
-                    default:
-                        ws_connection_close(conn);
-                        return;
-                }
+    if(!(revents & EV_READ)) return;
+    if(conn->websocket_partial
+        && conn->websocket_partial_len < conn->websocket_partial->length) {
+        int r = read(conn->watch.fd,
+            conn->websocket_partial->data + conn->websocket_partial_len,
+            conn->websocket_partial->length - conn->websocket_partial_len);
+        if(r < 0) {
+            switch(errno) {
+                case EAGAIN:
+                case EINTR:
+                    return;
+                default:
+                    ws_connection_close(conn);
+                    return;
             }
-            if(r == 0) {
-                ws_connection_close(conn);
-                return;
-            }
-            conn->websocket_partial_len += r;
-            if(conn->websocket_partial_len >= conn->websocket_partial->length){
-                unmask(conn->websocket_partial, conn->websocket_partial_mask);
+        }
+        if(r == 0) {
+            ws_connection_close(conn);
+            return;
+        }
+        conn->websocket_partial_len += r;
+        if(conn->websocket_partial_len >= conn->websocket_partial->length) {
+            unmask(conn->websocket_partial, conn->websocket_partial_mask,
+                conn->websocket_partial_frame);
+            if(conn->websocket_partial_fin) {
                 ws_websocket_cb cb = \
                     conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
                 int res = -1;
@@ -370,78 +384,120 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     ws_connection_close(conn);
                     return;
                 }
-                // TODO(tailhook) optimize, do more reads
             }
-        } else {
-            int r = read(conn->watch.fd,
-                conn->websocket_buf+conn->websocket_buf_offset,
-                conn->websocket_buf_size - conn->websocket_buf_offset);
-            if(r < 0) {
-                switch(errno) {
-                    case EAGAIN:
-                    case EINTR:
-                        return;
-                    default:
-                        ws_connection_close(conn);
-                        return;
-                }
-            }
-            if(r == 0) {
-                ws_connection_close(conn);
-                return;
-            }
-            int len = conn->websocket_buf_offset + r;
-            char *start = conn->websocket_buf;
-            int part_len;
-            char *part_start;
-            while(1) {
-                part_len = len;
-                part_start = start;
-                if(len < 2) break;
-                int fin = *start & 0x80;
-                int opcode = *start & 0xF;
-                int rsv = (*start >> 4) & 7;
-                if(rsv) goto error;
-                size_t msglen = start[1] & 0x7f;
-                int has_mask = start[1] & 0x80;
-                if(!has_mask) goto error;
-                switch(msglen) {
-                case 126:
-                    if(len < 4) goto stop_reading; // more bytes to read
-                    msglen = (msglen << 16) + htobe16(*(uint16_t*)(start+2));
-                    start += 4;
-                    len -= 4;
-                    break;
-                case 127:
-                    if(len < 10) goto stop_reading; // more bytes to read
-                    msglen = (msglen << 16) + htobe64(*(uint64_t*)(start+2));
-                    start += 10;
-                    len -= 10;
-                    break;
+            // TODO(tailhook) optimize, do more reads
+        }
+    } else {
+        int r = read(conn->watch.fd,
+            conn->websocket_buf+conn->websocket_buf_offset,
+            conn->websocket_buf_size - conn->websocket_buf_offset);
+        if(r < 0) {
+            switch(errno) {
+                case EAGAIN:
+                case EINTR:
+                    return;
                 default:
-                    start += 2;
-                    len -= 2;
-                    break;
-                }
-                if(msglen > conn->max_message_size) goto error;
-                if(len < 4) break;  // read more
-                char *mask = start;
+                    ws_connection_close(conn);
+                    return;
+            }
+        }
+        if(r == 0) {
+            ws_connection_close(conn);
+            return;
+        }
+        int len = conn->websocket_buf_offset + r;
+        char *start = conn->websocket_buf;
+        int part_len;
+        char *part_start;
+        while(1) {
+            part_len = len;
+            part_start = start;
+            if(len < 2) break;
+            int fin = *start & 0x80;
+            int opcode = *start & 0xF;
+            int rsv = (*start >> 4) & 7;
+            if(rsv) goto error;
+            size_t msglen = start[1] & 0x7f;
+            int has_mask = start[1] & 0x80;
+            if(!has_mask) goto error;
+            switch(msglen) {
+            case 126:
+                if(len < 4) goto stop_reading; // more bytes to read
+                msglen = (msglen << 16) + htobe16(*(uint16_t*)(start+2));
                 start += 4;
                 len -= 4;
-                // TODO(tailhook) check opcode
-                if(len >= msglen) {
-                    if(opcode == WS_MSG_CLOSE) {
-                        // TODO(tailhook) implement graceful close
+                break;
+            case 127:
+                if(len < 10) goto stop_reading; // more bytes to read
+                msglen = (msglen << 16) + htobe64(*(uint64_t*)(start+2));
+                start += 10;
+                len -= 10;
+                break;
+            default:
+                start += 2;
+                len -= 2;
+                break;
+            }
+            if(msglen > conn->max_message_size) goto error;
+            if(len < 4) break;  // read more
+            char *mask = start;
+            start += 4;
+            len -= 4;
+            if(len >= msglen && fin  // whole message in 1 frame in a buffer
+                && opcode) { // and it's not a continuation
+                if(opcode == WS_MSG_CLOSE) {
+                    // TODO(tailhook) implement graceful close
+                    ws_connection_close(conn);
+                    return;
+                }
+                ws_message_t *msg = ws_message_copy_data(conn, start, msglen);
+                unmask(msg, mask, 0);
+                switch(opcode) {
+                case WS_MSG_BINARY:
+                    msg->flags = WS_MSG_BINARY;
+                case WS_MSG_TEXT: {
+                    if(conn->websocket_partial) goto error;
+                    ws_websocket_cb cb = \
+                        conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
+                    int res = -1;
+                    if(cb) {
+                        res = cb(conn, msg);
+                    }
+                    ws_MESSAGE_DECREF(msg);
+                    if(res < 0) {
                         ws_connection_close(conn);
                         return;
                     }
-                    ws_message_t *msg = ws_message_copy_data(
-                        conn, start, msglen);
-                    unmask(msg, mask);
-                    switch(opcode) {
-                    case WS_MSG_BINARY:
-                        msg->flags = WS_MSG_BINARY;
-                    case WS_MSG_TEXT: {
+                    } break;
+                case WS_MSG_PING:
+                    msg->flags = WS_MSG_PONG;
+                    ws_message_send(conn, msg);
+                    ws_MESSAGE_DECREF(msg);
+                    break;
+                case WS_MSG_PONG:
+                    // TODO(tailhook) check pong response
+                    ws_MESSAGE_DECREF(msg);
+                    break;
+                default:
+                    ws_MESSAGE_DECREF(msg);
+                    ws_connection_close(conn);
+                    return;
+                }
+                start += msglen;
+                len -= msglen;
+            } else if(!opcode) { // continuation of partial
+                ws_message_t *msg = conn->websocket_partial;
+                if(!msg) goto error;
+                msg = ws_message_resize(msg, msg->length + msglen);
+                if(!msg) goto error;
+                conn->websocket_partial = msg;  // after realloc
+                conn->websocket_partial_frame = conn->websocket_partial_len;
+                if(len >= msglen) {
+                    memcpy(msg->data + conn->websocket_partial_len,
+                        start, msglen);
+                    unmask(msg, mask, conn->websocket_partial_frame);
+                    conn->websocket_partial_len += msglen;
+                    if(fin) {
                         ws_websocket_cb cb = \
                             conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
                         int res = -1;
@@ -449,47 +505,50 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                             res = cb(conn, msg);
                         }
                         ws_MESSAGE_DECREF(msg);
+                        conn->websocket_partial = NULL;
                         if(res < 0) {
                             ws_connection_close(conn);
                             return;
                         }
-                        } break;
-                    case WS_MSG_PING:
-                        msg->flags = WS_MSG_PONG;
-                        ws_message_send(conn, msg);
-                        ws_MESSAGE_DECREF(msg);
-                        break;
-                    case WS_MSG_PONG:
-                        // TODO(tailhook) check pong response
-                        ws_MESSAGE_DECREF(msg);
-                        break;
-                    default:
-                        ws_MESSAGE_DECREF(msg);
-                        ws_connection_close(conn);
-                        return;
                     }
                     start += msglen;
                     len -= msglen;
                 } else {
-                    if(opcode >= 8) break; // let's wait whole frame
-                    ws_message_t *msg = ws_message_new_size(conn, msglen);
-                    if(opcode == WS_MSG_BINARY) {
-                        msg->flags = WS_MSG_BINARY;
-                    }
-                    memcpy(msg->data, start, len);
-                    conn->websocket_partial = msg;
-                    conn->websocket_partial_len = len;
+                    memcpy(msg->data + conn->websocket_partial_len,
+                        start, len);
+                    conn->websocket_partial_len += len;
+                    conn->websocket_partial_fin = fin;
                     memcpy(conn->websocket_partial_mask, mask, 4);
                     conn->websocket_buf_offset = 0;
                     return;
                 }
+            } else {  // start of partial message
+                if(opcode >= 8) break; // let's wait whole frame
+                ws_message_t *msg = ws_message_new_size(conn, msglen);
+                if(opcode == WS_MSG_BINARY) {
+                    msg->flags = WS_MSG_BINARY;
+                }
+                memcpy(msg->data, start, len);
+                conn->websocket_partial = msg;
+                conn->websocket_partial_len = len;
+                conn->websocket_partial_frame = 0;
+                conn->websocket_partial_fin = fin;
+                memcpy(conn->websocket_partial_mask, mask, 4);
+                if(len == msglen) {
+                    unmask(msg, mask, 0);
+                    start += msglen;
+                    len -= msglen;
+                } else {
+                    conn->websocket_buf_offset = 0;
+                    return;
+                }
             }
-stop_reading:
-            if(part_len && conn->websocket_buf != part_start) {
-                memmove(conn->websocket_buf, part_start, part_len);
-            }
-            conn->websocket_buf_offset = part_len;
         }
+stop_reading:
+        if(part_len && conn->websocket_buf != part_start) {
+            memmove(conn->websocket_buf, part_start, part_len);
+        }
+        conn->websocket_buf_offset = part_len;
     }
     return;
 error:
