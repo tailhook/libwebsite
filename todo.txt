@@ -1,5 +1,5 @@
+ * periodic pings of idle connection
  * resizable input buffer
  * input body streaming
  * output body streaming (incl. chunked transfer encoding)
  * chunked input encoding (maybe?)
- * support of new websocket draft (-05?), but probably after browser support
