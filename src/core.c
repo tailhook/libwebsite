@@ -149,9 +149,9 @@ void ws_connection_close(ws_connection_t *conn) {
             ws_MESSAGE_DECREF(conn->websocket_queue[j]);
         }
         free(conn->websocket_buf);
-    }
-    if(conn->websocket_partial) {
-        ws_MESSAGE_DECREF(conn->websocket_partial);
+        if(conn->websocket_partial) {
+            ws_MESSAGE_DECREF(conn->websocket_partial);
+        }
     }
     free(conn);
 }
@@ -781,7 +781,7 @@ static int ws_head_slice(ws_request_t *req, int size) {
         req->bodylen = 0;
     }
     if(req->headerindex[WS_H_UPGRADE]) {
-        if(!strcmp(req->headerindex[WS_H_UPGRADE], "WebSocket")) {
+        if(!strcasecmp(req->headerindex[WS_H_UPGRADE], "WebSocket")) {
             req->websocket = TRUE;
             int res = 0;
             if(check_websocket(req) == 0) {
@@ -906,6 +906,7 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     conn->websocket_buf = NULL;
     conn->websocket_buf_size = 4096;
     conn->websocket_buf_offset = 0;
+    conn->websocket_partial = NULL;
     memcpy(conn->req_callbacks, serv->req_callbacks,
         sizeof(conn->req_callbacks));
     memcpy(conn->conn_callbacks, serv->conn_callbacks,
