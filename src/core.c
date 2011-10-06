@@ -881,6 +881,7 @@ static void flush_buffers(struct ev_loop *loop, struct ev_idle *watch,
         setsockopt(conn->watch.fd,
             IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
     }
+    ev_idle_stop(loop, watch);
 }
 
 static void ws_connection_init(int fd, ws_server_t *serv,
