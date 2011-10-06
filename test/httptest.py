@@ -336,6 +336,7 @@ class WebSocket(unittest.TestCase):
         self.assertEquals(resp, websock_hello_re)
         resp = sock.recv(4096)  #ensure connection is closed
         self.assertEquals(resp, b'')
+        self.testEcho()
 
 class DetailedHttp(unittest.TestCase):
 

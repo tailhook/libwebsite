@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #include <ev.h>
 #include <website.h>
@@ -31,6 +32,7 @@ int websocket(ws_request_t *req) {
 
 void close_conn(struct ev_loop *loop, struct ev_idle *watch, int revents) {
     ws_connection_close((ws_connection_t *)watch->data);
+    ev_idle_stop(loop, watch);
     free(watch);
 }
 
