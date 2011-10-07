@@ -443,8 +443,9 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
             char *mask = start;
             start += 4;
             len -= 4;
-            if(len >= msglen && fin  // whole message in 1 frame in a buffer
-                && opcode) { // and it's not a continuation
+            if(len >= msglen  // whole message in 1 frame in a buffer
+                && opcode  // and it's not a continuation
+                && (fin || opcode >= WS_MSG_CLOSE)) {
                 if(opcode == WS_MSG_CLOSE) {
                     // TODO(tailhook) implement graceful close
                     ws_connection_close(conn);
@@ -470,6 +471,10 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     }
                     } break;
                 case WS_MSG_PING:
+                    if(msglen > 125 || !fin) {
+                        ws_MESSAGE_DECREF(msg);
+                        goto error;
+                    }
                     msg->flags = WS_MSG_PONG;
                     ws_message_send(conn, msg);
                     ws_MESSAGE_DECREF(msg);
@@ -477,6 +482,7 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 case WS_MSG_PONG:
                     // TODO(tailhook) check pong response
                     ws_MESSAGE_DECREF(msg);
+                    if(msglen > 125 || !fin) goto error;
                     break;
                 default:
                     ws_MESSAGE_DECREF(msg);
@@ -524,6 +530,8 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 }
             } else {  // start of partial message
                 if(opcode >= 8) break; // let's wait whole frame
+                if(opcode != WS_MSG_TEXT && opcode != WS_MSG_BINARY)
+                    goto error;
                 ws_message_t *msg = ws_message_new_size(conn, msglen);
                 if(opcode == WS_MSG_BINARY) {
                     msg->flags = WS_MSG_BINARY;
