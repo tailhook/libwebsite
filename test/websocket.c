@@ -63,6 +63,7 @@ int main(int argc, char **argv) {
     struct ev_loop *loop = ev_default_loop(0);
     ws_server_t server;
     ws_server_init(&server, loop);
+    server.max_message_size = 16 << 20;
     ws_add_tcp(&server, inet_addr("127.0.0.1"), 8080);
     ws_REQUEST_CB(&server, reply);
     ws_WEBSOCKET_CB(&server, websocket);

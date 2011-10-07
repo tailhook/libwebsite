@@ -423,13 +423,13 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
             switch(msglen) {
             case 126:
                 if(len < 4) goto stop_reading; // more bytes to read
-                msglen = (msglen << 16) + htobe16(*(uint16_t*)(start+2));
+                msglen = htobe16(*(uint16_t*)(start+2));
                 start += 4;
                 len -= 4;
                 break;
             case 127:
                 if(len < 10) goto stop_reading; // more bytes to read
-                msglen = (msglen << 16) + htobe64(*(uint64_t*)(start+2));
+                msglen = htobe64(*(uint64_t*)(start+2));
                 start += 10;
                 len -= 10;
                 break;
@@ -528,13 +528,15 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 if(opcode == WS_MSG_BINARY) {
                     msg->flags = WS_MSG_BINARY;
                 }
-                memcpy(msg->data, start, len);
+                size_t part = msglen;
+                if(len < part) part = len;
+                memcpy(msg->data, start, part);
                 conn->websocket_partial = msg;
-                conn->websocket_partial_len = len;
+                conn->websocket_partial_len = part;
                 conn->websocket_partial_frame = 0;
                 conn->websocket_partial_fin = fin;
                 memcpy(conn->websocket_partial_mask, mask, 4);
-                if(len == msglen) {
+                if(len >= msglen) {
                     unmask(msg, mask, 0);
                     start += msglen;
                     len -= msglen;
@@ -568,7 +570,7 @@ static void write_websocket(struct ev_loop *loop, struct ev_io *watch,
             if(msg->length > 65535) {
                 header[1] = 127;
                 *(uint64_t*)(header+2) = htobe64(msg->length);
-                headlen = 8;
+                headlen = 10;
             } else if(msg->length > 125) {
                 header[1] = 126;
                 *(uint16_t*)(header+2) = htobe16(msg->length);
