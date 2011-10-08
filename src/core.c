@@ -370,6 +370,7 @@ static int unmask_and_check(ws_message_t *msg, char *mask, int offset) {
                         if(uchar < mincode) return -1;
                         else if(uchar >= 0xd800 && uchar <= 0xdfff) return -1;
                         else if(uchar > 0x10ffff) return -1;
+                        uchar = 0;
                     }
                 }
             }
@@ -401,9 +402,12 @@ static int unmask_and_check(ws_message_t *msg, char *mask, int offset) {
                     if(uchar < mincode) return -1;
                     else if(uchar >= 0xd800 && uchar <= 0xdfff) return -1;
                     else if(uchar > 0x10ffff) return -1;
+                    uchar = 0;
                 }
             }
         }
+        if(state == 1 && uchar >= (0xd800 >> 6) && uchar <= (0xdfff >> 6))
+            return -1;  // fail faster
         return state;
     } else {
         char *c = msg->data + offset, *e = msg->data + msg->length;
@@ -527,13 +531,13 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     return;
                 }
                 ws_message_t *msg = ws_message_copy_data(conn, start, msglen);
+                msg->flags = opcode;
                 if(unmask_and_check(msg, mask, 0)) {
                     ws_MESSAGE_DECREF(msg);
                     goto error;
                 }
                 switch(opcode) {
                 case WS_MSG_BINARY:
-                    msg->flags = WS_MSG_BINARY;
                 case WS_MSG_TEXT: {
                     if(conn->websocket_partial) goto error;
                     ws_websocket_cb cb = \
