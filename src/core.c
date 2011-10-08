@@ -335,10 +335,82 @@ int ws_message_send(ws_connection_t *conn, ws_message_t *msg) {
     return 0;
 }
 
-static void unmask(ws_message_t *msg, char *mask, int offset) {
-    char *c = msg->data + offset, *e = msg->data + msg->length;
-    for(int i = 0; c < e; ++c, ++i) {
-        *c = *c ^ mask[(size_t)i & 3];
+static int unmask_and_check(ws_message_t *msg, char *mask, int offset) {
+    if(msg->flags == WS_MSG_TEXT) {
+        unsigned char *c = msg->data + offset, *e = msg->data + msg->length;
+        int state = 0;
+        int uchar = 0;
+        int mincode = 0;
+        if(offset && c[-1] & 0x80) {
+            unsigned char *sc = c-1;
+            while((*sc & 0xc0) == 0x80) --sc;
+            while(sc < c) {
+                char cc = *sc++;
+                if(!state) {
+                    if(cc & 0x80) {
+                        if((cc & 0xc0) == 0x80) return -1;
+                        else if((cc & 0xe0) == 0xc0) {
+                            state = 1;
+                            uchar = cc & 0x1f;
+                            mincode = 0x80;
+                        } else if((cc & 0xf0) == 0xe0) {
+                            state = 2;
+                            uchar = cc & 0x0f;
+                            mincode = 0x800;
+                        } else if((cc & 0xf8) == 0xf0) {
+                            state = 3;
+                            uchar = cc & 0x07;
+                            mincode = 0x10000;
+                        } else return -1;
+                    }
+                } else {
+                    if((cc & 0xc0) != 0x80) return -1;
+                    uchar = (uchar << 6) | (cc & 0x3f);
+                    if(!-- state) {
+                        if(uchar < mincode) return -1;
+                        else if(uchar >= 0xd800 && uchar <= 0xdfff) return -1;
+                        else if(uchar > 0x10ffff) return -1;
+                    }
+                }
+            }
+        }
+        for(int i = 0; c < e; ++c, ++i) {
+            *c = *c ^ mask[(size_t)i & 3];
+            char cc = *c;
+            if(!state) {
+                if(cc & 0x80) {
+                    if((cc & 0xc0) == 0x80) return -1;
+                    else if((cc & 0xe0) == 0xc0) {
+                        state = 1;
+                        uchar = cc & 0x1f;
+                        mincode = 0x80;
+                    } else if((cc & 0xf0) == 0xe0) {
+                        state = 2;
+                        uchar = cc & 0x0f;
+                        mincode = 0x800;
+                    } else if((cc & 0xf8) == 0xf0) {
+                        state = 3;
+                        uchar = cc & 0x07;
+                        mincode = 0x10000;
+                    } else return -1;
+                }
+            } else {
+                if((cc & 0xc0) != 0x80) return -1;
+                uchar = (uchar << 6) | (cc & 0x3f);
+                if(!-- state) {
+                    if(uchar < mincode) return -1;
+                    else if(uchar >= 0xd800 && uchar <= 0xdfff) return -1;
+                    else if(uchar > 0x10ffff) return -1;
+                }
+            }
+        }
+        return state;
+    } else {
+        char *c = msg->data + offset, *e = msg->data + msg->length;
+        for(int i = 0; c < e; ++c, ++i) {
+            *c = *c ^ mask[(size_t)i & 3];
+        }
+        return 0;
     }
 }
 
@@ -369,9 +441,10 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
         }
         conn->websocket_partial_len += r;
         if(conn->websocket_partial_len >= conn->websocket_partial->length) {
-            unmask(conn->websocket_partial, conn->websocket_partial_mask,
-                conn->websocket_partial_frame);
+            int ures = unmask_and_check(conn->websocket_partial,
+                conn->websocket_partial_mask, conn->websocket_partial_frame);
             if(conn->websocket_partial_fin) {
+                if(ures) goto error;
                 ws_websocket_cb cb = \
                     conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
                 int res = -1;
@@ -384,6 +457,8 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     ws_connection_close(conn);
                     return;
                 }
+            } else {
+                if(ures < 0) goto error;
             }
             // TODO(tailhook) optimize, do more reads
         }
@@ -452,7 +527,10 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                     return;
                 }
                 ws_message_t *msg = ws_message_copy_data(conn, start, msglen);
-                unmask(msg, mask, 0);
+                if(unmask_and_check(msg, mask, 0)) {
+                    ws_MESSAGE_DECREF(msg);
+                    goto error;
+                }
                 switch(opcode) {
                 case WS_MSG_BINARY:
                     msg->flags = WS_MSG_BINARY;
@@ -501,9 +579,11 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 if(len >= msglen) {
                     memcpy(msg->data + conn->websocket_partial_len,
                         start, msglen);
-                    unmask(msg, mask, conn->websocket_partial_frame);
+                    int ures = unmask_and_check(msg, mask,
+                        conn->websocket_partial_frame);
                     conn->websocket_partial_len += msglen;
                     if(fin) {
+                        if(ures) goto error;
                         ws_websocket_cb cb = \
                             conn->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE];
                         int res = -1;
@@ -516,6 +596,8 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                             ws_connection_close(conn);
                             return;
                         }
+                    } else {
+                        if(ures < 0) goto error;
                     }
                     start += msglen;
                     len -= msglen;
@@ -545,7 +627,7 @@ static void read_websocket(struct ev_loop *loop, struct ev_io *watch,
                 conn->websocket_partial_fin = fin;
                 memcpy(conn->websocket_partial_mask, mask, 4);
                 if(len >= msglen) {
-                    unmask(msg, mask, 0);
+                    if(unmask_and_check(msg, mask, 0) < 0) goto error;
                     start += msglen;
                     len -= msglen;
                 } else {
