@@ -10,7 +10,7 @@ APPNAME='libwebsite'
 if os.path.exists('.git'):
     VERSION=subprocess.getoutput('git describe').lstrip('v').replace('-', '_')
 else:
-    VERSION='0.2.15'
+    VERSION='0.2.16'
 
 top = '.'
 out = 'build'
