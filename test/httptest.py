@@ -122,6 +122,15 @@ class HTTP(unittest.TestCase):
         resp = sock.recv(4096)
         self.assertEquals(resp, sample_output2)
 
+    def testLatency(self):
+        tm = time.time()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', 8080))
+        sock.send(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output2)
+        self.assertLess(time.time() - tm, 0.1)
+
     def testNoHost(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(('localhost', 8080))

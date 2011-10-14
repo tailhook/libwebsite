@@ -105,8 +105,8 @@ static void ws_request_finish(ws_request_t *req) {
     TAILQ_REMOVE(&req->conn->requests, req, lst);
     req->conn->request_num -= 1;
     if(!req->conn->request_num && req->conn->reply_watch.active) {
+        // this is entered when closing connection prematurely
         ev_io_stop(req->conn->loop, &req->conn->reply_watch);
-        ev_idle_start(req->conn->loop, &req->conn->flush_watch);
     }
     bool need_free = TRUE;
     if(req->request_state >= WS_R_RECVBODY) {
@@ -970,8 +970,8 @@ static void flush_buffers(struct ev_loop *loop, struct ev_idle *watch,
     ws_connection_t *conn = (ws_connection_t *)((char *)watch
         - offsetof(ws_connection_t, flush_watch));
     if((conn->websocket_buf)
-        ? !TAILQ_FIRST(&conn->requests)
-        : !conn->websocket_qlen) {
+        ? !conn->websocket_qlen
+        : !TAILQ_FIRST(&conn->requests)) {
         int opt = 1;
         // setting NODELAY flushs buffers, but we are still in tcp cork mode
         setsockopt(conn->watch.fd,
@@ -1219,6 +1219,8 @@ static void ws_send_reply(struct ev_loop *loop,
                 if(conn->websocket_qlen) {
                     ev_io_start(loop, watch);
                 }
+            } else {
+                ev_idle_start(req->conn->loop, &req->conn->flush_watch);
             }
         }
     }
