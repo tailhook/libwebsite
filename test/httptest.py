@@ -16,7 +16,7 @@ websockbin = os.environ.get('WEBSOCK_BIN',
     os.path.join('.', 'build', 'test', 'websocket'))
 
 sample_output = (b'HTTP/1.1 200 OK\r\n'
-    b'Content-Length:          130\r\n'
+    b'Content-Length:          129\r\n'
     b'Connection: close\r\n'
     b'\r\n'
     b'<!DOCTYPE html>\n'
@@ -25,10 +25,10 @@ sample_output = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\x00')
+    b'</html>\n\r\n')
 
 sample_output2 = (b'HTTP/1.1 200 OK\r\n'
-    b'Content-Length:          130\r\n'
+    b'Content-Length:          129\r\n'
     b'Connection: Keep-Alive\r\n'
     b'\r\n'
     b'<!DOCTYPE html>\n'
@@ -37,7 +37,7 @@ sample_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\x00')
+    b'</html>\n\r\n')
 
 detailed_output1 = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
@@ -52,7 +52,7 @@ detailed_output1 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n')
+    b'</html>\n\r\n')
 detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
     b'Connection: close\r\n'
@@ -66,7 +66,7 @@ detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n')
+    b'</html>\n\r\n')
 
 websock_request = (b'GET /echo HTTP/1.1\r\n'
     b'Host: localhost:8080\r\n'
