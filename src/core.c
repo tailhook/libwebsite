@@ -1241,7 +1241,7 @@ static void ws_send_reply(struct ev_loop *loop,
                     ev_io_start(loop, watch);
                 }
             } else {
-                ev_idle_start(req->conn->loop, &req->conn->flush_watch);
+                ev_idle_start(conn->loop, &conn->flush_watch);
             }
         }
     }
