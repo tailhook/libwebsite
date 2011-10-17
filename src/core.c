@@ -1192,7 +1192,7 @@ static void ws_send_reply(struct ev_loop *loop,
                 data[iovnum].iov_base = req->reply_body;
                 data[iovnum].iov_len = req->reply_body_size;
             } else {
-                size_t off = req->reply_head_size - req->reply_pos;
+                size_t off = req->reply_pos - req->reply_head_size;
                 data[iovnum].iov_base = req->reply_body + off;
                 data[iovnum].iov_len = req->reply_body_size - off;
             }
