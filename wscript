@@ -8,7 +8,8 @@ import subprocess
 
 APPNAME='libwebsite'
 if os.path.exists('.git'):
-    VERSION=subprocess.getoutput('git describe').lstrip('v').replace('-', '_')
+    VERSION = subprocess.Popen(['git', 'describe'], stdout=subprocess.PIPE)\
+        .communicate()[0].decode('ascii').strip().lstrip('v').replace('-', '_')
 else:
     VERSION='0.2.18'
 
@@ -35,7 +36,6 @@ def build(bld):
         target       = 'website',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        lib          = ['ev'],
         )
     if Options.options.build_shared:
         bld.install_files('${PREFIX}/lib', 'libwebsite.so')
@@ -53,9 +53,9 @@ def build_tests(bld):
             ],
         target       = 'simple',
         includes     = ['src', 'include'],
-        cflags       = ['-std=c99'],
-        linkflags    = ['-g', 'libwebsite.a'],
-        lib          = ['ev', 'crypto'],
+        cflags       = ['-std=gnu99'],
+        libpath      = ['.'],
+        lib          = ['website', 'ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -66,8 +66,8 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         defines      = [],
         cflags       = ['-std=c99'],
-        linkflags    = ['-g', 'libwebsite.a'],
-        lib          = ['ev', 'crypto'],
+        libpath      = ['.'],
+        lib          = ['website', 'ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -77,8 +77,8 @@ def build_tests(bld):
         target       = 'routing',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        linkflags    = ['-g', 'libwebsite.a'],
-        lib          = ['ev', 'crypto'],
+        libpath      = ['.'],
+        lib          = ['website', 'ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -88,8 +88,8 @@ def build_tests(bld):
         target       = 'websocket',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        linkflags    = ['-g', 'libwebsite.a'],
-        lib          = ['ev', 'crypto'],
+        libpath      = ['.'],
+        lib          = ['website', 'ev', 'crypto'],
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -99,8 +99,8 @@ def build_tests(bld):
         target       = 'runtests',
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
-        linkflags    = ['-g', 'libwebsite.a'],
-        lib          = ['ev', 'cunit'],
+        libpath      = ['.'],
+        lib          = ['website', 'ev', 'cunit'],
         )
     bld.add_group()
     bld(rule='./runtests', always=True)
