@@ -46,6 +46,13 @@ def build(bld):
 def build_tests(bld):
     build(bld)
     bld.add_group()
+    lib = [
+        'website',
+        'ev',
+        'crypto',
+        'm',
+        'cunit',
+        ]
     bld(
         features     = ['c', 'cprogram'],
         source       = [
@@ -55,7 +62,7 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         cflags       = ['-std=gnu99'],
         libpath      = ['.'],
-        lib          = ['website', 'ev', 'crypto'],
+        lib          = lib,
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -67,7 +74,7 @@ def build_tests(bld):
         defines      = [],
         cflags       = ['-std=c99'],
         libpath      = ['.'],
-        lib          = ['website', 'ev', 'crypto'],
+        lib          = lib,
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -78,7 +85,7 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
         libpath      = ['.'],
-        lib          = ['website', 'ev', 'crypto'],
+        lib          = lib,
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -89,7 +96,7 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
         libpath      = ['.'],
-        lib          = ['website', 'ev', 'crypto'],
+        lib          = lib,
         )
     bld(
         features     = ['c', 'cprogram'],
@@ -100,7 +107,7 @@ def build_tests(bld):
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
         libpath      = ['.'],
-        lib          = ['website', 'ev', 'cunit'],
+        lib          = lib,
         )
     bld.add_group()
     bld(rule='./runtests', always=True)
