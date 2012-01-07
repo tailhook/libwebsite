@@ -140,6 +140,43 @@ void testFuzzy() {
     CU_ASSERT_EQUAL(result, 37);
 }
 
+void testDefault() {
+    size_t result;
+    void *m;
+
+    m = ws_fuzzy_new();
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "", TRUE, 1), 1);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "/two", TRUE, 2), 2);
+    ws_fuzzy_compile(m);
+    CU_ASSERT(ws_fuzzy(m, "/one", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_fuzzy(m, "/", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_fuzzy(m, "", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_fuzzy(m, "/two", &result));
+    CU_ASSERT_EQUAL(result, 2);
+    CU_ASSERT(ws_fuzzy(m, "/two2", &result));
+    CU_ASSERT_EQUAL(result, 2);
+
+    m = ws_fuzzy_new();
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "", TRUE, 1), 1);
+    CU_ASSERT_EQUAL(ws_fuzzy_add(m, "example.com", TRUE, 2), 2);
+    ws_rfuzzy_compile(m);
+    CU_ASSERT(ws_rfuzzy(m, ".com", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_rfuzzy(m, ".net", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_rfuzzy(m, ".", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_rfuzzy(m, "", &result));
+    CU_ASSERT_EQUAL(result, 1);
+    CU_ASSERT(ws_rfuzzy(m, "example.com", &result));
+    CU_ASSERT_EQUAL(result, 2);
+    CU_ASSERT(ws_rfuzzy(m, "test.example.com", &result));
+    CU_ASSERT_EQUAL(result, 2);
+}
+
 void testRFuzzy() {
     void *m = ws_fuzzy_new();
     CU_ASSERT_EQUAL(ws_fuzzy_add(m, "example.org", FALSE, 1), 1);
@@ -197,6 +234,7 @@ int main(int argc, char **argv) {
        || (NULL == CU_add_test(pSuite, "Case-insensitive compilation", testIMatchCompile))
        || (NULL == CU_add_test(pSuite, "Fuzzy match", testFuzzy))
        || (NULL == CU_add_test(pSuite, "Fuzzy reverse match", testRFuzzy))
+       || (NULL == CU_add_test(pSuite, "Default fallback", testDefault))
        || 0) {
       CU_cleanup_registry();
       return CU_get_error();

@@ -338,18 +338,29 @@ int ws_fuzzy(void *rbox, const char *value, size_t *result) {
     size_t *ctarg = hashes;
     int sizei = 0;
     int csize = box->sizes[sizei];
-    while (*s) {
-	    res += (res<<1) + (res<<4) + (res<<7) + (res<<8) + (res<<24);
-    	res ^= (size_t)*s++;
-    	++i;
-    	if(i == csize) {
-            *ctarg++ = res;
-            if(++sizei >= box->nsizes) {
-                csize = -1;
-            } else {
-                csize = box->sizes[sizei];
+    if(i == csize) { // if default match exists
+        *ctarg++ = res;
+        if(++sizei >= box->nsizes) {
+            csize = -1;
+        } else {
+            csize = box->sizes[sizei];
+        }
+    }
+    if(csize > 0) {
+        while (*s) {
+            res += (res<<1) + (res<<4) + (res<<7) + (res<<8) + (res<<24);
+            res ^= (size_t)*s++;
+            ++i;
+            if(i == csize) {
+                *ctarg++ = res;
+                if(++sizei >= box->nsizes) {
+                    csize = -1;
+                    break;
+                } else {
+                    csize = box->sizes[sizei];
+                }
             }
-    	}
+        }
     }
 
     size_t hash = res;
@@ -395,18 +406,29 @@ int ws_rfuzzy(void *rbox, const char *value, size_t *result) {
     size_t *ctarg = hashes;
     int sizei = 0;
     int csize = box->sizes[sizei];
-    while (p >= value) {
-	    res += (res<<1) + (res<<4) + (res<<7) + (res<<8) + (res<<24);
-    	res ^= (size_t)*p--;
-    	++i;
-    	if(i == csize) {
-            *ctarg++ = res;
-            if(++sizei >= box->nsizes) {
-                csize = -1;
-            } else {
-                csize = box->sizes[sizei];
+    if(i == csize) { // if default match exists
+        *ctarg++ = res;
+        if(++sizei >= box->nsizes) {
+            csize = -1;
+        } else {
+            csize = box->sizes[sizei];
+        }
+    }
+    if(csize > 0) {
+        while (p >= value) {
+            res += (res<<1) + (res<<4) + (res<<7) + (res<<8) + (res<<24);
+            res ^= (size_t)*p--;
+            ++i;
+            if(i == csize) {
+                *ctarg++ = res;
+                if(++sizei >= box->nsizes) {
+                    csize = -1;
+                    break;
+                } else {
+                    csize = box->sizes[sizei];
+                }
             }
-    	}
+        }
     }
 
     size_t hash = res;
