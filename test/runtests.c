@@ -25,6 +25,7 @@ void testMatch() {
     CU_ASSERT_EQUAL(result, -1);
     CU_ASSERT_FALSE(ws_match(m, "another text", &result));
     CU_ASSERT_EQUAL(result, -1);
+    ws_match_free(m);
 }
 
 void testMatchCompile() {
@@ -48,7 +49,7 @@ void testMatchCompile() {
     CU_ASSERT_EQUAL(result, -1);
     CU_ASSERT_FALSE(ws_match(m, "another text", &result));
     CU_ASSERT_EQUAL(result, -1);
-
+    ws_match_free(m);
 }
 
 void testIMatch() {
@@ -73,6 +74,7 @@ void testIMatch() {
     CU_ASSERT_EQUAL(result, -1);
     CU_ASSERT_FALSE(ws_imatch(m, "another text", &result));
     CU_ASSERT_EQUAL(result, -1);
+    ws_match_free(m);
 }
 
 
@@ -102,6 +104,7 @@ void testIMatchCompile() {
     CU_ASSERT_EQUAL(result, -1);
     CU_ASSERT_FALSE(ws_imatch(m, "another text", &result));
     CU_ASSERT_EQUAL(result, -1);
+    ws_match_free(m);
 }
 
 void testFuzzy() {
@@ -138,6 +141,7 @@ void testFuzzy() {
     CU_ASSERT_EQUAL(result, 37);
     CU_ASSERT(ws_fuzzy(m, "/three/seventeen", &result));
     CU_ASSERT_EQUAL(result, 37);
+    ws_fuzzy_free(m);
 }
 
 void testDefault() {
@@ -158,6 +162,7 @@ void testDefault() {
     CU_ASSERT_EQUAL(result, 2);
     CU_ASSERT(ws_fuzzy(m, "/two2", &result));
     CU_ASSERT_EQUAL(result, 2);
+    ws_fuzzy_free(m);
 
     m = ws_fuzzy_new();
     CU_ASSERT_EQUAL(ws_fuzzy_add(m, "", TRUE, 1), 1);
@@ -175,6 +180,7 @@ void testDefault() {
     CU_ASSERT_EQUAL(result, 2);
     CU_ASSERT(ws_rfuzzy(m, "test.example.com", &result));
     CU_ASSERT_EQUAL(result, 2);
+    ws_fuzzy_free(m);
 }
 
 void testRFuzzy() {
@@ -211,6 +217,7 @@ void testRFuzzy() {
     CU_ASSERT_EQUAL(result, 37);
     CU_ASSERT(ws_rfuzzy(m, "testworld.example.net", &result));
     CU_ASSERT_EQUAL(result, 37);
+    ws_fuzzy_free(m);
 }
 
 int main(int argc, char **argv) {
