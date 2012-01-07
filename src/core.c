@@ -1156,6 +1156,11 @@ int ws_add_unix(ws_server_t *serv, const char *filename, size_t len) {
     int size = 1;
     if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
         &size, sizeof(size)) < 0) return -1;
+    if(!access(filename, F_OK)) {
+        if(connect(fd, &addr, sizeof(addr.sun_family)+len) < 0) {
+            if(unlink(filename) < 0) return -1;
+        }
+    }
     if(bind(fd, &addr, sizeof(addr.sun_family)+len) < 0) return -1;
     if(listen(fd, 4096) < 0) return -1;
     return ws_add_fd(serv, fd);
