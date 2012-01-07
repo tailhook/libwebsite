@@ -23,6 +23,19 @@
 #define TRUE 1
 #define FALSE 0
 
+#define LWARN(holder, msg, ...) if((holder)->logmsg_cb) { \
+    (holder)->logmsg_cb(WS_LOG_WARN, __FILE__, __LINE__, msg, ##__VA_ARGS__); \
+    }
+#define SWARN(holder) if((holder)->logstd_cb) { \
+    (holder)->logstd_cb(WS_LOG_WARN, __FILE__, __LINE__, ""); \
+    }
+#define LALERT(holder, msg, ...) if((holder)->logmsg_cb) { \
+    (holder)->logmsg_cb(WS_LOG_ALERT, __FILE__, __LINE__, msg, ##__VA_ARGS__); \
+    }
+#define SALERT(holder) if((holder)->logstd_cb) { \
+    (holder)->logstd_cb(WS_LOG_ALERT, __FILE__, __LINE__, ""); \
+    }
+
 static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
                                 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
                                 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
@@ -68,6 +81,8 @@ static void ws_request_init(ws_request_t *req, ws_connection_t *conn, char*buf){
     req->conn = conn;
     memcpy(&req->req_callbacks,conn->req_callbacks, sizeof(req->req_callbacks));
     req->network_timeout = conn->network_timeout;
+    req->logstd_cb = conn->logstd_cb;
+    req->logmsg_cb = conn->logmsg_cb;
     req->headers_buf = buf;
     req->bufposition = 0;
     req->headerlen = 0;
@@ -990,6 +1005,8 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     }
     memcpy(&conn->addr, addr, sizeof(struct sockaddr_in));
     conn->network_timeout = serv->network_timeout;
+    conn->logstd_cb = serv->logstd_cb;
+    conn->logmsg_cb = serv->logmsg_cb;
     conn->_req_size = serv->_req_size;
     conn->_message_size = serv->_message_size;
     conn->serv = serv;
@@ -1027,7 +1044,18 @@ static void ws_connection_init(int fd, ws_server_t *serv,
     ev_io_start(serv->loop, &conn->watch);
 }
 
-static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
+static void wake_up_accept(struct ev_loop *loop, struct ev_timer *w, int rev) {
+    ws_server_t *serv = (ws_server_t *)(((char *)w)
+        - offsetof(ws_server_t, accept_sleeper));
+    for(ws_listener_t *l=serv->listeners; l; l = l->next) {
+        if(!l->watch.active) {
+            ev_io_start(loop, &l->watch);
+        }
+    }
+    ev_timer_stop(loop, &serv->accept_sleeper);
+}
+
+static void accept_callback(struct ev_loop *loop, ws_listener_t *l,
     int revents) {
     if(revents & EV_READ) {
         struct sockaddr_in addr;
@@ -1035,13 +1063,20 @@ static void ws_accept_callback(struct ev_loop *loop, ws_listener_t *l,
         int fd = accept4(l->watch.fd, &addr, &addrlen,
             SOCK_NONBLOCK|SOCK_CLOEXEC);
         if(fd < 0) {
-            switch(fd) {
+            switch(errno) {
             case EAGAIN: case ENETDOWN: case EPROTO: case ENOPROTOOPT:
             case EHOSTDOWN: case ENONET: case EHOSTUNREACH: case EOPNOTSUPP:
             case ENETUNREACH: case ECONNABORTED:
                 break;
+            case EMFILE:
+            case ENFILE:
+                LWARN(l->serv, "Not enought file descriptors. "
+                      "Please set ulimit -n xxxxxx with bigger value");
+                ev_io_stop(loop, &l->watch);
+                ev_timer_again(loop, &l->serv->accept_sleeper);
+                break;
             default:
-                perror("Socket error");
+                SALERT(l->serv);
                 abort();
             }
         } else {
@@ -1095,6 +1130,9 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     assert(hindex == WS_H_WEBSOCKET_VERSION);
     bzero(serv->req_callbacks, sizeof(serv->req_callbacks));
     bzero(serv->conn_callbacks, sizeof(serv->conn_callbacks));
+    serv->logstd_cb = NULL;
+    serv->logmsg_cb = NULL;
+    ev_timer_init(&serv->accept_sleeper, wake_up_accept, 30, 30);
     return 0;
 }
 
@@ -1103,8 +1141,8 @@ int ws_server_destroy(ws_server_t *serv) {
     for(ws_listener_t *p, *l=serv->listeners; l; p = l, l = l->next, free(p)) {
         if(l->watch.active) {
             ev_io_stop(serv->loop, &l->watch);
-            close(l->watch.fd);
         }
+        close(l->watch.fd);
     }
     return 0;
 }
@@ -1119,7 +1157,7 @@ int ws_add_fd(ws_server_t *serv, int fd) {
         return -1;
     }
     ev_io_init(&l->watch,
-        (void (*)(struct ev_loop*, ev_io *, int))ws_accept_callback,
+        (void (*)(struct ev_loop*, ev_io *, int))accept_callback,
         fd, EV_READ);
     l->serv = serv;
 

@@ -92,6 +92,17 @@ typedef enum {
     WS_MSG_TYPE = 0xF
 } ws_message_flags;
 
+typedef enum {
+    WS_LOG_EMERG,
+    WS_LOG_ALERT,
+    WS_LOG_CRIT,
+    WS_LOG_ERR,
+    WS_LOG_WARN,
+    WS_LOG_NOTICE,
+    WS_LOG_INFO,
+    WS_LOG_DEBUG,
+} ws_loglevel_t;
+
 struct ws_request_s;
 struct ws_connection_s;
 
@@ -107,6 +118,7 @@ typedef int (*ws_request_cb)(struct ws_request_s *req);
 typedef int (*ws_connection_cb)(struct ws_connection_s *conn);
 typedef int (*ws_websocket_cb)(struct ws_connection_s *conn,
     struct ws_message_s *msg);
+typedef void (*ws_log_cb)(int level, char *file, int line, char *msg, ...);
 
 typedef struct ws_header_pair_s {
     char *name;
@@ -125,6 +137,8 @@ typedef struct ws_request_s {
 
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
+    ws_log_cb logstd_cb;
+    ws_log_cb logmsg_cb;
     ev_tstamp network_timeout;
     int request_state;
     char *headers_buf;
@@ -165,6 +179,8 @@ typedef struct ws_connection_s {
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
+    ws_log_cb logstd_cb;
+    ws_log_cb logmsg_cb;
     TAILQ_HEAD(ws_req_list_s, ws_request_s) requests;
     size_t request_num;
     int close_on_finish;
@@ -188,6 +204,7 @@ typedef struct ws_connection_s {
 
 typedef struct ws_server_s {
     struct ev_loop *loop;
+    ev_timer accept_sleeper;
     ev_tstamp network_timeout;
     int max_header_size;
     int _conn_size;
@@ -201,6 +218,8 @@ typedef struct ws_server_s {
     ws_request_cb req_callbacks[WS_REQ_CB_COUNT];
     ws_connection_cb conn_callbacks[WS_CONN_CB_COUNT];
     ws_websocket_cb wsock_callbacks[WS_WEBSOCKET_CB_COUNT];
+    ws_log_cb logstd_cb;
+    ws_log_cb logmsg_cb;
     ws_hparser_t header_parser;
 } ws_server_t;
 
