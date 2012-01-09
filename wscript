@@ -11,7 +11,7 @@ if os.path.exists('.git'):
     VERSION = subprocess.Popen(['git', 'describe'], stdout=subprocess.PIPE)\
         .communicate()[0].decode('ascii').strip().lstrip('v').replace('-', '_')
 else:
-    VERSION='0.2.18'
+    VERSION='0.2.19'
 
 top = '.'
 out = 'build'
