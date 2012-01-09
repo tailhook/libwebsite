@@ -1410,7 +1410,8 @@ int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
     req->reply_body = (char *)data;
     req->reply_body_size = len;
     if(!req->websocket) {
-        int lenlen = sprintf(req->reply_head + req->_contlen_offset, "%12d", len);
+        int lenlen = sprintf(req->reply_head + req->_contlen_offset,
+            "%12lu", len);
         assert(lenlen == 12);
         *(req->reply_head + req->_contlen_offset+12) = '\r';
     }
