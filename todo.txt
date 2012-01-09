@@ -1,3 +1,4 @@
+ * better log coverage
  * implement max message size for fragmented messages
  * implement better connection close codes
  * periodic pings of idle connection
