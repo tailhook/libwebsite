@@ -23,6 +23,10 @@
     (targ)->conn_callbacks[WS_CONN_CB_DISCONNECT] = (ws_connection_cb)fun
 #define ws_MESSAGE_CB(targ, fun) \
     (targ)->wsock_callbacks[WS_WEBSOCKET_CB_MESSAGE] = (ws_websocket_cb)fun
+#define ws_LOGSTD_CB(targ, fun) \
+    (targ)->logstd_cb = fun;
+#define ws_LOGMSG_CB(targ, fun) \
+    (targ)->logmsg_cb = fun;
 #define ws_SET_TIMEOUT(targ, value) (targ)->network_timeout = (value)
 #define ws_MESSAGE_DATA(msg, ptr, len, free_fun) \
     (msg)->data = ptr; \
