@@ -1220,10 +1220,7 @@ static void ws_send_reply(struct ev_loop *loop,
     if(revents & EV_WRITE) {
         assert(req->reply_head_size);
         size_t total = req->reply_body_size + req->reply_head_size;
-        if(req->reply_body_size) {
-            total += 2;
-        }
-        struct iovec data[3];
+        struct iovec data[2];
         int iovnum = 0;
         if(req->reply_pos < req->reply_head_size) {
             data[iovnum].iov_base = req->reply_head + req->reply_pos;
@@ -1238,17 +1235,6 @@ static void ws_send_reply(struct ev_loop *loop,
                 size_t off = req->reply_pos - req->reply_head_size;
                 data[iovnum].iov_base = req->reply_body + off;
                 data[iovnum].iov_len = req->reply_body_size - off;
-            }
-            iovnum ++;
-        }
-        if(req->reply_body_size) {
-            if(iovnum) {
-                data[iovnum].iov_base = "\r\n";
-                data[iovnum].iov_len = 2;
-            } else {
-                size_t left = total - req->reply_pos;
-                data[iovnum].iov_base = ((char *)"\r\n") + (2-left);
-                data[iovnum].iov_len = left;
             }
             iovnum ++;
         }

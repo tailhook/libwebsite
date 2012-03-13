@@ -25,7 +25,7 @@ sample_output = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\r\n')
+    b'</html>\n')
 
 sample_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
@@ -37,7 +37,7 @@ sample_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\r\n')
+    b'</html>\n')
 
 detailed_output1 = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
@@ -52,7 +52,7 @@ detailed_output1 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\r\n')
+    b'</html>\n')
 detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
     b'Connection: close\r\n'
@@ -66,7 +66,7 @@ detailed_output2 = (b'HTTP/1.1 200 OK\r\n'
     b'  <body>\n'
     b'    <h1>Hello from sample</h1>\n'
     b'  </body>\n'
-    b'</html>\n\r\n')
+    b'</html>\n')
 
 websock_request = (b'GET /echo HTTP/1.1\r\n'
     b'Host: localhost:8080\r\n'
