@@ -172,6 +172,7 @@ typedef struct ws_connection_s {
     struct ev_io watch;
     struct ev_io reply_watch;
     struct ev_idle flush_watch;
+    struct ev_timer network_timer;
     struct sockaddr_in addr;
     ev_tstamp network_timeout;
     int _req_size;

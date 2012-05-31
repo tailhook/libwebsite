@@ -150,6 +150,9 @@ void ws_connection_close(ws_connection_t *conn) {
     if(conn->flush_watch.active) {
         ev_idle_stop(conn->loop, &conn->flush_watch);
     }
+    if(conn->network_timer.active) {
+        ev_timer_stop(conn->loop, &conn->network_timer);
+    }
     close(conn->watch.fd);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_DISCONNECT];
     if(cb) {
@@ -740,6 +743,9 @@ static int ws_enable_websocket(ws_request_t *req) {
     ev_io_stop(conn->loop, &conn->watch);
     assert(TAILQ_LAST(&conn->requests, ws_req_list_s) == req);
 
+    if(conn->network_timer.active) {
+        ev_timer_stop(conn->loop, &conn->network_timer);
+    }
     conn->websocket_buf = malloc(conn->websocket_buf_size
         + conn->max_message_queue*sizeof(ws_message_t*));
     conn->websocket_queue = (ws_message_t **)(conn->websocket_buf
@@ -995,6 +1001,13 @@ static void flush_buffers(struct ev_loop *loop, struct ev_idle *watch,
     ev_idle_stop(loop, watch);
 }
 
+static void network_close(struct ev_loop *loop, struct ev_timer *timer,
+    int revents) {
+    ws_connection_t *conn = (ws_connection_t *)((char *)timer
+        - offsetof(ws_connection_t, network_timeout));
+    ws_connection_close(conn);
+}
+
 static void ws_connection_init(int fd, ws_server_t *serv,
     struct sockaddr_in *addr) {
     assert(serv->_conn_size >= sizeof(ws_connection_t));
@@ -1035,6 +1048,8 @@ static void ws_connection_init(int fd, ws_server_t *serv,
         fd, EV_WRITE);
     ev_idle_init(&conn->flush_watch,
         (void (*)(struct ev_loop*, struct ev_idle *,int))flush_buffers);
+    ev_timer_init(&conn->network_timer, network_close,
+        conn->network_timeout, conn->network_timeout);
     ws_connection_cb cb = conn->conn_callbacks[WS_CONN_CB_CONNECT];
     if(cb && cb(conn) < 0) {
         close(fd);
@@ -1042,6 +1057,7 @@ static void ws_connection_init(int fd, ws_server_t *serv,
         return;
     }
     ev_io_start(serv->loop, &conn->watch);
+    ev_timer_start(serv->loop, &conn->network_timer);
 }
 
 static void wake_up_accept(struct ev_loop *loop, struct ev_timer *w, int rev) {
@@ -1100,7 +1116,7 @@ int ws_server_init(ws_server_t *serv, struct ev_loop *loop) {
     serv->listeners = NULL;
     serv->listeners_num = 0;
     serv->connection_num = 0;
-    serv->network_timeout = 10.0;
+    serv->network_timeout = 120.0;
     serv->max_header_size = 16384;
     serv->max_message_size = 16384;
     serv->max_message_queue = 1024;
@@ -1253,6 +1269,7 @@ static void ws_send_reply(struct ev_loop *loop,
             ws_connection_close(req->conn);
             return;
         }
+        ev_timer_again(req->conn->loop, &req->conn->network_timer);
         req->reply_pos += res;
         if(req->reply_pos >= total) {
             req->request_state = WS_R_SENT;
