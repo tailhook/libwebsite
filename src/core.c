@@ -743,9 +743,6 @@ static int ws_enable_websocket(ws_request_t *req) {
     ev_io_stop(conn->loop, &conn->watch);
     assert(TAILQ_LAST(&conn->requests, ws_req_list_s) == req);
 
-    if(conn->network_timer.active) {
-        ev_timer_stop(conn->loop, &conn->network_timer);
-    }
     conn->websocket_buf = malloc(conn->websocket_buf_size
         + conn->max_message_queue*sizeof(ws_message_t*));
     conn->websocket_queue = (ws_message_t **)(conn->websocket_buf
@@ -1004,7 +1001,7 @@ static void flush_buffers(struct ev_loop *loop, struct ev_idle *watch,
 static void network_close(struct ev_loop *loop, struct ev_timer *timer,
     int revents) {
     ws_connection_t *conn = (ws_connection_t *)((char *)timer
-        - offsetof(ws_connection_t, network_timeout));
+        - offsetof(ws_connection_t, network_timer));
     ws_connection_close(conn);
 }
 
@@ -1282,6 +1279,7 @@ static void ws_send_reply(struct ev_loop *loop,
             } else if(conn->close_on_finish) {
                 ws_connection_close(conn);
             } else if(conn->websocket_buf) {
+                ev_timer_stop(conn->loop, &conn->network_timer);
                 ev_set_cb(&conn->reply_watch, write_websocket);
                 if(conn->websocket_qlen) {
                     ev_io_start(loop, watch);
