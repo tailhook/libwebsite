@@ -122,6 +122,18 @@ class HTTP(unittest.TestCase):
         resp = sock.recv(4096)
         self.assertEquals(resp, sample_output2)
 
+    def testLongHeaders(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect(('localhost', 8080))
+        sock.send(b"GET / HTTP/1.1\r\n"
+                  b"X-Test-Header: 1\r\n"
+                  b"Host: localhost\r\n")
+        time.sleep(0.2)
+        sock.send(b"X-Test-Header2: 1\r\n\r\n")
+        resp = sock.recv(4096)
+        self.assertEquals(resp, sample_output2)
+
     def testLatency(self):
         tm = time.time()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

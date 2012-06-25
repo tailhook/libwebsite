@@ -811,8 +811,8 @@ static int ws_body_slice(ws_request_t *req, int size) {
 
 static int ws_head_slice(ws_request_t *req, int size) {
     req->bufposition += size;
-    char *e1 = memmem(req->headers_buf, size, "\r\n\r\n", 4);
-    char *e2 = memmem(req->headers_buf, size, "\n\n", 2);
+    char *e1 = memmem(req->headers_buf, req->bufposition, "\r\n\r\n", 4);
+    char *e2 = memmem(req->headers_buf, req->bufposition, "\n\n", 2);
     size_t reallen;
     if(e2 < e1 && e2 || !e1) {
         e1 = e2;
