@@ -128,6 +128,7 @@ class test(BuildContext):
 
 def dist(ctx):
     ctx.excl = ['.waf*', '*.tar.bz2', '*.zip', 'build',
+        'tmp', '*~',
         '.git*', '.lock*', '**/*.pyc']
     ctx.algo = 'tar.bz2'
 
