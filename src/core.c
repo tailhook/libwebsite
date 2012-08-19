@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <endian.h>
+#include <fcntl.h>
 
 #include <openssl/sha.h>
 
@@ -1165,6 +1166,9 @@ int ws_server_start(ws_server_t *serv) {
 }
 
 int ws_add_fd(ws_server_t *serv, int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
     ws_listener_t *l = (ws_listener_t *)malloc(sizeof(ws_listener_t));
     if(!l) {
         return -1;
