@@ -1191,6 +1191,10 @@ int ws_add_tcp(ws_server_t *serv, in_addr_t ip, int port) {
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = ip;
     addr.sin_port = htons(port);
+#ifdef __APPLE__
+    addr.sin_len = sizeof(struct sockaddr_in);
+    memset(&addr.sin_zero, 0, sizeof(addr.sin_zero));
+#endif
     int fd = socket(PF_INET, SOCK_STREAM, 0);
     if(fd < 0) return -1;
     int size = 1;
