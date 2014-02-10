@@ -1402,6 +1402,29 @@ int ws_finish_headers(ws_request_t *req) {
     return 0;
 }
 
+/*  When it's not too late (request headers have not been sent already)
+ *  it's possible to reset request state and change status code  */
+int ws_reset_headers(ws_request_t *req) {
+    if(req->request_state < WS_R_EMPTY) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if(req->request_state >= WS_R_DONE) {
+        errno = EALREADY;
+        return -1;
+    }
+    if(req->request_state >= WS_R_STATUS) {
+        req->_contlen_offset = 0;
+        obstack_free(&req->pieces, obstack_finish(&req->pieces));
+        if(req->request_state >= WS_R_BODY) {
+            req->reply_head = NULL;
+            req->reply_head_size = 0;
+        }
+    }
+    req->request_state = WS_R_EMPTY;
+    return 0;
+}
+
 int ws_reply_data(ws_request_t *req, const char *data, size_t len) {
     if(req->request_state < WS_R_EMPTY) {
         errno = EAGAIN;
