@@ -1,4 +1,4 @@
-# Maintainer: Paul Colomiets <pc@gafol.net>
+# Maintainer: Paul Colomiets <paul@colomiets.name>
 
 pkgname=libwebsite
 pkgver=${VERSION}
@@ -8,9 +8,10 @@ arch=('i686' 'x86_64')
 url="http://github.com/tailhook/libwebsite"
 license=('MIT')
 depends=('libev' 'openssl')
-makedepends=('python3' 'cunit')
-source=(https://github.com/downloads/tailhook/libwebsite/$pkgname-$pkgver.tar.bz2)
+checkdepends=('python3' 'cunit')
+source=(https://github.com/tailhook/libwebsite/archive/v$pkgver.tar.gz)
 md5sums=('${DIST_MD5}')
+options=(staticlibs)
 
 build() {
   cd $srcdir/$pkgname-$pkgver
