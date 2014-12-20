@@ -25,7 +25,7 @@ def configure(ctx):
     ctx.check_tool('compiler_c')
     ctx.env.BUILD_SHARED = Options.options.build_shared
 
-def build(bld):
+def build_only(bld):
     bld(
         features     = ['c', ('cshlib'
             if bld.env.BUILD_SHARED else 'cstlib')],
@@ -37,6 +37,9 @@ def build(bld):
         includes     = ['src', 'include'],
         cflags       = ['-std=c99'],
         )
+
+def build(bld):
+    build_only(bld)
     if Options.options.build_shared:
         bld.install_files('${PREFIX}/lib', 'libwebsite.so')
     else:
