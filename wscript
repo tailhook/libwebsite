@@ -34,7 +34,7 @@ def build_only(bld):
             'src/search.c',
             ],
         target       = 'website',
-        includes     = ['src', 'include'],
+        includes     = ['src', 'include','/usr/pkg/include/ev'],
         cflags       = ['-std=c99'],
         )
 
