@@ -1076,8 +1076,10 @@ static void accept_callback(struct ev_loop *loop, ws_listener_t *l,
     if(revents & EV_READ) {
         struct sockaddr_in addr;
         int addrlen = sizeof(addr);
-        int fd = accept4(l->watch.fd, &addr, &addrlen,
-            SOCK_NONBLOCK|SOCK_CLOEXEC);
+        int fd = accept(l->watch.fd, &addr, &addrlen
+			 //SOCK_NONBLOCK
+			 //|SOCK_CLOEXEC
+			 );
         if(fd < 0) {
             switch(errno) {
             case EAGAIN:
