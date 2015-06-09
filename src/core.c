@@ -13,7 +13,15 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <math.h>
+
+#ifdef HAVE_SYS_ENDIAN_H
 #include <sys/endian.h>
+#endif
+
+#ifdef HAVE_ENDIAN_H
+#include <endian.h>
+#endif
+
 #include <errno.h>
 #include <fcntl.h>
 
