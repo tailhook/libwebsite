@@ -13,7 +13,8 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <math.h>
-#include <endian.h>
+#include <sys/endian.h>
+#include <errno.h>
 #include <fcntl.h>
 
 #include <openssl/sha.h>
@@ -332,7 +333,8 @@ void ws_message_free(ws_message_t *msg) {
     }
     free(msg);
 }
-
+#define EXFULL 54
+#define ENONET 64 
 int ws_message_send(ws_connection_t *conn, ws_message_t *msg) {
     if(conn->websocket_qlen >= conn->websocket_queue_size) {
         errno = EXFULL;
@@ -1074,13 +1076,22 @@ static void accept_callback(struct ev_loop *loop, ws_listener_t *l,
     if(revents & EV_READ) {
         struct sockaddr_in addr;
         int addrlen = sizeof(addr);
-        int fd = accept4(l->watch.fd, &addr, &addrlen,
-            SOCK_NONBLOCK|SOCK_CLOEXEC);
+        int fd = accept(l->watch.fd, &addr, &addrlen
+			 //SOCK_NONBLOCK
+			 //|SOCK_CLOEXEC
+			 );
         if(fd < 0) {
             switch(errno) {
-            case EAGAIN: case ENETDOWN: case EPROTO: case ENOPROTOOPT:
-            case EHOSTDOWN: case ENONET: case EHOSTUNREACH: case EOPNOTSUPP:
-            case ENETUNREACH: case ECONNABORTED:
+            case EAGAIN:
+	    case ENETDOWN:
+	    case EPROTO:
+	    case ENOPROTOOPT:
+            case EHOSTDOWN:
+	      //    case ENONET:
+	    case EHOSTUNREACH:
+	    case EOPNOTSUPP:
+            case ENETUNREACH:
+	    case ECONNABORTED:
                 break;
             case EMFILE:
             case ENFILE:
@@ -1099,7 +1110,7 @@ static void accept_callback(struct ev_loop *loop, ws_listener_t *l,
             setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
             // let's also cork our connection to send in smaller number of
             // packets
-            setsockopt(fd, IPPROTO_TCP, TCP_CORK, &opt, sizeof(opt));
+            //BSD TODO : setsockopt(fd, IPPROTO_TCP, TCP_CORK, &opt, sizeof(opt));
             ws_connection_init(fd, l->serv, &addr);
         }
     }
