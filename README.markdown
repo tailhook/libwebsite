@@ -13,10 +13,11 @@ Dependencies (you need ``*-dev`` versions of packages):
 Build Instructions
 ------------------
 
-Build process is done with waf::
+Build process is done with autotools
 
-    ./waf configure --prefix=/usr
-    ./waf build
-    sudo ./waf install
+    ./autoreconf
+    .configure --prefix=/usr
+    make
+    make install
 
 
