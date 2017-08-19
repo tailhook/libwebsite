@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 
 import subprocess
 import os.path
@@ -8,12 +9,9 @@ import errno
 
 from itertools import count
 
-bin = os.environ.get('SIMPLE_BIN',
-    os.path.join('.', 'build', 'test', 'simple'))
-detbin = os.environ.get('DETAILED_BIN',
-    os.path.join('.', 'build', 'test', 'detailed'))
-websockbin = os.environ.get('WEBSOCK_BIN',
-    os.path.join('.', 'build', 'test', 'websocket'))
+bin = os.environ.get('SIMPLE_BIN', os.path.join('.', 'simple'))
+detbin = os.environ.get('DETAILED_BIN', os.path.join('.', 'detailed'))
+websockbin = os.environ.get('WEBSOCK_BIN', os.path.join('.', 'websocket'))
 
 sample_output = (b'HTTP/1.1 200 OK\r\n'
     b'Content-Length:          129\r\n'
