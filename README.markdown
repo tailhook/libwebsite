@@ -13,10 +13,9 @@ Dependencies (you need ``*-dev`` versions of packages):
 Build Instructions
 ------------------
 
-Build process is done with waf::
+Build process is done with CMake::
 
-    ./waf configure --prefix=/usr
-    ./waf build
-    sudo ./waf install
-
+    mkdir build && cd build
+    cmake ..
+    make
 
