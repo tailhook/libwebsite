@@ -8,10 +8,13 @@ set(test_sources
     runtests.c
 )
 
+add_custom_target(tests)
+
 foreach(test_src ${test_sources})
     string(REPLACE ".c" "" ex_name ${test_src})
-    add_executable(${ex_name} ${test_src})
+    add_executable(${ex_name} EXCLUDE_FROM_ALL ${test_src})
     target_link_libraries(${ex_name} ${PROJECT_NAME})
+    add_dependencies(tests ${ex_name})
 endforeach()
 
 # Runtests depends on cunit

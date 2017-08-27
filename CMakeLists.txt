@@ -6,9 +6,7 @@ set(Sources
     src/search.c
 )
 
-add_compile_options(
-    -std=c99
-)
+add_compile_options(-std=c99)
 
 add_library(${PROJECT_NAME} SHARED ${Sources})
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")

@@ -13,9 +13,12 @@ Dependencies (you need ``*-dev`` versions of packages):
 Build Instructions
 ------------------
 
-Build process is done with CMake::
+Build process is done with CMake:
 
     mkdir build && cd build
     cmake ..
-    make
+    cmake --build .
 
+For building test examples:
+
+    cmake --build . --target tests
